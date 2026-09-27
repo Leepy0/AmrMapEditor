@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>AmrMapEditor</RootNamespace>
+    <AssemblyName>AmrMapEditor</AssemblyName>
+    <Version>0.4.0</Version>
+    <Product>AMR Map Editor</Product>
+  </PropertyGroup>
+
+</Project>
