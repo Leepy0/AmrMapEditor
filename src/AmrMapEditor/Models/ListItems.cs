@@ -8,10 +8,11 @@ public sealed class BlobItem : INotifyPropertyChanged
 {
     private bool _isChecked;
 
-    public BlobItem(Blob blob, string text, bool isChecked, byte threshold = 0)
+    public BlobItem(Blob blob, string title, string detail, bool isChecked, byte threshold = 0)
     {
         Blob = blob;
-        Text = text;
+        Title = title;
+        Detail = detail;
         _isChecked = isChecked;
         Threshold = threshold;
     }
@@ -21,7 +22,8 @@ public sealed class BlobItem : INotifyPropertyChanged
     /// <summary>검출 당시 판정값 (삭제 시 동일 기준 적용)</summary>
     public byte Threshold { get; }
 
-    public string Text { get; }
+    public string Title { get; }
+    public string Detail { get; }
 
     public bool IsChecked
     {
@@ -37,14 +39,13 @@ public sealed class BlobItem : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public static BlobItem Noise(int index, Blob b, byte threshold, double res) =>
-        new(b, $"#{index}  {b.Area} px ({b.Area * res * res:0.####} m²)  {b.Bounds.Width}×{b.Bounds.Height} ({b.MaxSide * res:0.##} m)",
-            true, threshold);
+        new(b, $"{index}", $"{b.Area:N0} px · {b.Bounds.Width}×{b.Bounds.Height} · {b.MaxSide * res:0.##} m", true, threshold);
 
     public static BlobItem Duplicate(int index, Blob b, double res) =>
-        new(b, $"#{index}  {b.Area} px  ({b.Bounds.X}, {b.Bounds.Y})  길이 {b.MaxSide * res:0.##} m", true);
+        new(b, $"{index}", $"{b.Area:N0} px · 길이 {b.MaxSide * res:0.##} m", true);
 
     public static BlobItem Gap(int index, Blob b, double res) =>
-        new(b, $"#{index}  ({b.Bounds.X}, {b.Bounds.Y})  틈 {b.MaxSide * res:0.##} m", false);
+        new(b, $"{index}", $"틈 {b.MaxSide * res:0.##} m · ({b.Bounds.X}, {b.Bounds.Y})", false);
 }
 
 /// <summary>기준 맵 대비 변경 영역 목록 항목</summary>
@@ -53,11 +54,13 @@ public sealed class RegionItem
     public RegionItem(int index, Blob region)
     {
         Bounds = region.Bounds;
-        Text = $"#{index}  {region.Area} px  위치 ({region.Bounds.X}, {region.Bounds.Y})  {region.Bounds.Width}×{region.Bounds.Height}";
+        Title = $"{index}";
+        Detail = $"{region.Area:N0} px · {region.Bounds.Width}×{region.Bounds.Height} · ({region.Bounds.X}, {region.Bounds.Y})";
     }
 
     public IntRect Bounds { get; }
-    public string Text { get; }
+    public string Title { get; }
+    public string Detail { get; }
 }
 
 /// <summary>도면 레이어 표시 여부</summary>
@@ -68,12 +71,12 @@ public sealed class LayerItem : INotifyPropertyChanged
     public LayerItem(string name, int count, bool visible)
     {
         Name = name;
-        Text = $"{name}  ({count})";
+        CountText = count.ToString("N0");
         _isVisible = visible;
     }
 
     public string Name { get; }
-    public string Text { get; }
+    public string CountText { get; }
 
     public bool IsVisible
     {

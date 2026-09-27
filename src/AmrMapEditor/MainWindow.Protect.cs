@@ -51,6 +51,7 @@ public partial class MainWindow
             ? PixelRegion.BuildMask(_protect.Select(p => p.Region), _map.Width, _map.Height)
             : null;
         if (_tracker != null) _tracker.Protect = ProtectEnableCheck.IsChecked == true ? _protectMask : null;
+        ProtectList.Visibility = _protect.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         RefreshRegions();
     }
 

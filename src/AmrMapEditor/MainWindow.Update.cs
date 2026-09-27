@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using AmrMapEditor.Controls;
 using AmrMapEditor.Core;
 using AmrMapEditor.Models;
@@ -24,7 +25,6 @@ public partial class MainWindow
     private bool[]? _updateMask;
     private OffsetResult? _lastOffset;
     private bool _dupDetected;
-    private DiffStats? _lastDiff;
 
     // ───────────── 1. 기준 맵 ─────────────
 
@@ -77,15 +77,17 @@ public partial class MainWindow
 
         _reference = dx == 0 && dy == 0 && sameSize ? r : MapAlign.Shift(r, _map.Width, _map.Height, dx, dy);
         _referenceName = Path.GetFileName(dlg.FileName);
-        RefFileText.Text = _referenceName + (note.Length > 0 ? $"\n{note}" : "");
+        RefFileText.Text = _referenceName + (note.Length > 0 ? $" · {note}" : "");
+        RefFileText.ToolTip = dlg.FileName + (note.Length > 0 ? $"\n{note}" : "");
         _diffRegions.Clear();
         _dupCandidates.Clear();
         _dupDetected = false;
         _lastOffset = null;
-        OffsetText.Text = "-";
+        OffsetText.Text = "";
+        OffsetText.ToolTip = null;
 
         if (_overlayMode == MapOverlayMode.None)
-            OverlayModeCombo.SelectedIndex = 1;   // 변경점 표시로 전환 (핸들러에서 오버레이 갱신)
+            OverlayDiff.IsChecked = true;   // 변경점 표시로 전환 (핸들러에서 오버레이 갱신)
         else
             RebuildOverlay();
 
@@ -101,10 +103,10 @@ public partial class MainWindow
         _referenceName = null;
         _lastOffset = null;
         _dupDetected = false;
-        _lastDiff = null;
-        RefFileText.Text = "기준 맵 없음";
-        DiffStatsText.Text = "";
-        OffsetText.Text = "-";
+        RefFileText.Text = "";
+        RefFileText.ToolTip = null;
+        OffsetText.Text = "";
+        OffsetText.ToolTip = null;
         _diffRegions.Clear();
         _dupCandidates.Clear();
         _focusMarker = null;
@@ -114,11 +116,10 @@ public partial class MainWindow
         if (_tool == EditTool.Restore) SelectTool(EditTool.Brush);
     }
 
-    private void OnOverlayModeChanged(object sender, SelectionChangedEventArgs e)
+    private void OnOverlayModeChanged(object sender, RoutedEventArgs e)
     {
         if (!_ready) return;
-        if ((OverlayModeCombo.SelectedItem as ComboBoxItem)?.Tag is string tag &&
-            Enum.TryParse(tag, out MapOverlayMode mode))
+        if (sender is RadioButton { Tag: string tag } && Enum.TryParse(tag, out MapOverlayMode mode))
         {
             _overlayMode = mode;
             RebuildOverlay();
@@ -146,16 +147,13 @@ public partial class MainWindow
     {
         if (_map == null || _reference == null)
         {
-            DiffStatsText.Text = "";
-            _lastDiff = null;
             RefreshUpdateGuide();
             return;
         }
         DiffStats st = MapDiff.Count(_map, _reference, _occThreshold);
-        _lastDiff = st;
-        DiffStatsText.Text = st.Total == 0
-            ? "기준 맵과 동일"
-            : $"추가된 장애물 {st.Added:N0} px · 사라진 장애물 {st.Removed:N0} px · 기타 값 변화 {st.Other:N0} px";
+        DiffAddedText.Text = $"{st.Added:N0} px";
+        DiffRemovedText.Text = $"{st.Removed:N0} px";
+        DiffOtherText.Text = $"{st.Other:N0} px";
         RefreshUpdateGuide();
     }
 
@@ -195,8 +193,8 @@ public partial class MainWindow
             : null;
         long px = _updateMask?.LongCount(b => b) ?? 0;
         UpdateAreaText.Text = _updateAreas.Count == 0
-            ? "지정 안 함 (3~5단계는 맵 전체 대상)"
-            : $"{_updateAreas.Count}개 영역 · {px:N0} px (≈ {px * _meta.Resolution * _meta.Resolution:0.#} m²)";
+            ? "지정 안 함 · 3~5단계는 맵 전체가 대상"
+            : $"{_updateAreas.Count}개 · {px:N0} px · {px * _meta.Resolution * _meta.Resolution:0.#} m²";
         RefreshRegions();
         RefreshUpdateGuide();
     }
@@ -247,28 +245,31 @@ public partial class MainWindow
         if (r == null)
         {
             OffsetText.Text = "새로 생긴 장애물이 너무 적어 추정할 수 없습니다.";
+            OffsetText.ToolTip = null;
             return;
         }
         _lastOffset = r;
         double res = _meta.Resolution;
 
-        var sb = new StringBuilder();
-        sb.Append($"업데이트분을 dx {r.Dx:+0;-0;0}, dy {r.Dy:+0;-0;0} px");
-        if (Math.Abs(r.AngleDeg) > 1e-9) sb.Append($", 회전 {r.AngleDeg:+0.0;-0.0}°");
-        sb.AppendLine(" 옮기면 기존 벽과 겹칩니다.");
-        sb.AppendLine($"(월드 x {r.Dx * res:+0.00;-0.00;0} m, y {-r.Dy * res:+0.00;-0.00;0} m)");
-        sb.Append($"겹침 {r.InlierRatio:P0} · 기존 벽까지 평균 거리 {r.MeanBefore:0.0} → {r.MeanAfter:0.0} px · 대상 {r.PointCount:N0} px");
-
+        // 화면에는 결론만, 세부 수치는 툴팁으로
+        string shift = $"x {r.Dx:+0;-0;0}, y {r.Dy:+0;-0;0} px" +
+                       (Math.Abs(r.AngleDeg) > 1e-9 ? $", 회전 {r.AngleDeg:+0.0;-0.0}°" : "");
         string verdict;
         if (r.Dx == 0 && r.Dy == 0 && Math.Abs(r.AngleDeg) < 1e-9)
-            verdict = "어긋남 없음 → 새 장애물은 실제 변경일 가능성이 큽니다.";
+            verdict = "어긋남 없음 · 새 장애물은 실제 변경일 가능성이 큽니다.";
         else if (r.InlierRatio < 0.3)
-            verdict = "겹침이 낮아 신뢰도가 낮습니다. 이중 벽보다 실제 변경이 많을 수 있습니다.";
+            verdict = "겹침이 낮아 신뢰도가 낮습니다. 실제 변경이 많을 수 있습니다.";
         else if (Math.Abs(r.AngleDeg) >= 0.3)
-            verdict = "회전 어긋남이 있어 이동만으로는 맞지 않습니다. 이중 벽 정리(5단계)나 재업데이트를 권장합니다.";
+            verdict = "회전 어긋남 · 이중 벽 정리(5)나 재업데이트를 권장합니다.";
         else
-            verdict = "일정한 이동 어긋남입니다. 이동 합성 또는 이중 벽 정리로 보정할 수 있습니다.";
-        OffsetText.Text = sb + "\n→ " + verdict;
+            verdict = "일정한 이동 · 옮겨서 합치거나 이중 벽을 정리하세요.";
+        OffsetText.Text = $"{shift} · 겹침 {r.InlierRatio:P0}\n{verdict}";
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"업데이트분을 {shift} 옮기면 기존 벽과 겹칩니다.");
+        sb.AppendLine($"월드 x {r.Dx * res:+0.00;-0.00;0} m, y {-r.Dy * res:+0.00;-0.00;0} m");
+        sb.Append($"기존 벽까지 평균 거리 {r.MeanBefore:0.0} → {r.MeanAfter:0.0} px · 대상 {r.PointCount:N0} px");
+        OffsetText.ToolTip = sb.ToString();
 
         RealignDxBox.Text = r.Dx.ToString();
         RealignDyBox.Text = r.Dy.ToString();
@@ -340,9 +341,7 @@ public partial class MainWindow
         if (DupList.SelectedItem is BlobItem item) FocusOn(item.Blob.Bounds);
     }
 
-    private void OnCheckAllDup(object sender, RoutedEventArgs e) => SetAllChecked(_dupCandidates, true);
-
-    private void OnUncheckAllDup(object sender, RoutedEventArgs e) => SetAllChecked(_dupCandidates, false);
+    private void OnToggleAllDup(object sender, RoutedEventArgs e) => ToggleAll(_dupCandidates);
 
     private void OnRestoreDuplicates(object sender, RoutedEventArgs e)
     {
@@ -411,6 +410,7 @@ public partial class MainWindow
         int index = 1;
         foreach (Blob b in regions.OrderByDescending(x => x.Area).Take(MaxDiffRegions))
             _diffRegions.Add(new RegionItem(index++, b));
+        DiffRegionList.Visibility = _diffRegions.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         SetStatus(regions.Count == 0
             ? "변경 영역 없음"
@@ -422,41 +422,40 @@ public partial class MainWindow
         if (DiffRegionList.SelectedItem is RegionItem item) FocusOn(item.Bounds);
     }
 
-    private void OnGoCleanupTab(object sender, RoutedEventArgs e) => SideTabs.SelectedItem = CleanupTab;
+    private void OnGoCleanupTab(object sender, RoutedEventArgs e) => SegClean.IsChecked = true;
 
     // ───────────── 진행 상황 ─────────────
 
     private void RefreshUpdateGuide()
     {
-        if (_map == null)
+        bool hasRef = _map != null && _reference != null;
+        RefEmptyPanel.Visibility = hasRef ? Visibility.Collapsed : Visibility.Visible;
+        RefStepsPanel.Visibility = hasRef ? Visibility.Visible : Visibility.Collapsed;
+        DiffRegionList.Visibility = _diffRegions.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        // 기울기 보정은 좌표계를 바꾸므로 기준 맵 비교 중에는 막음
+        DeskewButton.IsEnabled = _reference == null;
+        if (!hasRef)
         {
-            GuideText.Text = "업데이트된 맵을 먼저 여세요.";
-            OutsideText.Text = "-";
-            return;
-        }
-        if (_reference == null)
-        {
-            GuideText.Text = "1단계: 업데이트 전 기준 맵을 여세요.\n지금 열린 맵(업데이트 후)을 기준 맵과 비교하며 보정합니다.";
-            OutsideText.Text = "기준 맵이 필요합니다.";
+            RevertOutsideButton.IsEnabled = false;
             return;
         }
 
-        long outside = _updateMask != null ? UpdateCorrection.CountOutside(_map, _reference, _updateMask) : -1;
-        OutsideText.Text = _updateMask == null
-            ? "업데이트 영역을 먼저 지정하세요 (2단계)."
-            : outside == 0 ? "영역 밖 변경 없음 ✓" : $"영역 밖에서 기준 맵과 다른 픽셀 {outside:N0} px";
+        long outside = _updateMask != null ? UpdateCorrection.CountOutside(_map!, _reference!, _updateMask) : -1;
+        OutsideText.Text = outside < 0 ? "업데이트 영역을 먼저 지정하세요."
+            : outside == 0 ? "영역 밖 변경 없음" : $"영역 밖 변경 {outside:N0} px";
+        RevertOutsideButton.IsEnabled = outside > 0;
 
-        var sb = new StringBuilder();
-        sb.AppendLine($"✓ 1 기준 맵: {_referenceName}");
-        sb.AppendLine(_updateAreas.Count > 0 ? $"✓ 2 업데이트 영역 {_updateAreas.Count}개" : "· 2 업데이트 영역: 지정 안 함 (선택)");
-        sb.AppendLine(outside < 0 ? "· 3 영역 밖 복원: 영역 지정 후 가능"
-            : outside == 0 ? "✓ 3 영역 밖 변경 없음" : $"· 3 영역 밖 변경 {outside:N0} px 남음");
-        sb.AppendLine(_lastOffset == null ? "· 4 어긋남: 확인 전"
-            : $"✓ 4 어긋남 ({_lastOffset.Dx:+0;-0;0}, {_lastOffset.Dy:+0;-0;0}) px, 겹침 {_lastOffset.InlierRatio:P0}");
-        sb.AppendLine(!_dupDetected ? "· 5 이중 벽: 검출 전"
-            : _dupCandidates.Count == 0 ? "✓ 5 이중 벽 후보 없음" : $"· 5 이중 벽 후보 {_dupCandidates.Count}개 남음");
-        if (_lastDiff != null)
-            sb.Append($"   남은 변경: 추가 {_lastDiff.Added:N0} / 삭제 {_lastDiff.Removed:N0} / 기타 {_lastDiff.Other:N0} px");
-        GuideText.Text = sb.ToString().TrimEnd();
+        SetStep(Step2Badge, Step2Text, 2, _updateAreas.Count > 0);
+        SetStep(Step3Badge, Step3Text, 3, outside == 0);
+        SetStep(Step4Badge, Step4Text, 4, _lastOffset != null);
+        SetStep(Step5Badge, Step5Text, 5, _dupDetected && _dupCandidates.Count == 0);
+    }
+
+    /// <summary>단계 번호 원: 완료되면 초록 체크</summary>
+    private void SetStep(Border badge, TextBlock text, int step, bool done)
+    {
+        badge.Background = Res(done ? "GreenBrush" : "SegmentTrackBrush");
+        text.Text = done ? "✓" : step.ToString();
+        text.Foreground = done ? Brushes.White : Res("SecondaryLabelBrush");
     }
 }

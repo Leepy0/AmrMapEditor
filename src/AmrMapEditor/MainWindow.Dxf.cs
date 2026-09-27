@@ -64,8 +64,11 @@ public partial class MainWindow
         _dxfPlacement = null;
         _dxfLayers.Clear();
         MapViewer.DxfGeometry = null;
-        DxfFileText.Text = "도면 없음";
-        DxfUnitText.Text = "단위: -";
+        DxfFileText.Text = "";
+        DxfFileText.ToolTip = null;
+        DxfUnitText.Text = "";
+        DxfEmptyPanel.Visibility = Visibility.Visible;
+        DxfContentPanel.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>맵에 연결된 도면이 있으면 불러옴</summary>
@@ -114,6 +117,7 @@ public partial class MainWindow
             item.PropertyChanged += (_, _) =>
             {
                 if (_bulk) return;
+                SyncLayersAllCheck();
                 RebuildDxfGeometry();
                 SaveDxfLink();
             };
@@ -125,8 +129,13 @@ public partial class MainWindow
             ? new DxfPlacement { Scale = link.Scale, RotationDeg = link.RotationDeg, OffsetX = link.OffsetX, OffsetY = link.OffsetY }
             : DxfPlacement.CenterOn(d, IsLayerVisible, DxfUnitScale(), _map!.Bounds);
 
-        DxfFileText.Text = $"{Path.GetFileName(path)}  (선 {d.Polylines.Count:N0}개, 레이어 {_dxfLayers.Count}개)";
-        DxfUnitText.Text = $"단위: {d.UnitName} · 1단위 = {DxfUnitScale():0.#####} px";
+        DxfFileText.Text = Path.GetFileName(path);
+        DxfFileText.ToolTip = path;
+        DxfUnitText.Text = $"선 {d.Polylines.Count:N0} · 레이어 {_dxfLayers.Count} · {d.UnitName}";
+        DxfUnitText.ToolTip = $"도면 1단위 = {DxfUnitScale():0.#####} px";
+        DxfEmptyPanel.Visibility = Visibility.Collapsed;
+        DxfContentPanel.Visibility = Visibility.Visible;
+        SyncLayersAllCheck();
         UpdateDxfPlacementUi();
         RebuildDxfGeometry();
         return true;
@@ -195,17 +204,23 @@ public partial class MainWindow
 
     private void OnDxfShowToggle(object sender, RoutedEventArgs e) => MapViewer.ShowDxf = DxfShowCheck.IsChecked == true;
 
-    private void OnDxfLayersAll(object sender, RoutedEventArgs e) => SetAllLayers(true);
-
-    private void OnDxfLayersNone(object sender, RoutedEventArgs e) => SetAllLayers(false);
+    /// <summary>모두 표시 중이면 모두 숨김, 아니면 모두 표시</summary>
+    private void OnToggleAllLayers(object sender, RoutedEventArgs e) => SetAllLayers(!_dxfLayers.All(l => l.IsVisible));
 
     private void SetAllLayers(bool visible)
     {
         _bulk = true;
         foreach (LayerItem l in _dxfLayers) l.IsVisible = visible;
         _bulk = false;
+        SyncLayersAllCheck();
         RebuildDxfGeometry();
         SaveDxfLink();
+    }
+
+    private void SyncLayersAllCheck()
+    {
+        int shown = _dxfLayers.Count(l => l.IsVisible);
+        DxfLayersAllCheck.IsChecked = shown == 0 ? false : shown == _dxfLayers.Count ? true : null;
     }
 
     // ───────────── 배치 값 ─────────────
@@ -269,9 +284,9 @@ public partial class MainWindow
             2 => "② 맵에서 A와 같은 위치 클릭",
             3 => "③ 도면에서 기준점 B 클릭 (A와 멀리 떨어진 점)",
             4 => "④ 맵에서 B와 같은 위치 클릭",
-            _ => "-",
+            _ => "",
         };
-        DxfAlignText.Text = _alignStep > 0 ? msg + "  · Esc 취소" : msg;
+        SetAlignText(_alignStep > 0 ? msg + "  · Esc 취소" : "");
         if (_alignStep > 0) SetStatus(msg);
     }
 
@@ -345,7 +360,7 @@ public partial class MainWindow
         CancelAlign(false);
         if (p == null)
         {
-            DxfAlignText.Text = "두 점이 너무 가깝습니다. 다시 시도하세요.";
+            SetAlignText("두 점이 너무 가깝습니다. 다시 시도하세요.");
             return;
         }
 
@@ -362,7 +377,7 @@ public partial class MainWindow
             double err = Math.Max(Dist(a, _alignMap1), Dist(b, _alignMap2));
             msg += $", 두 점 오차 {err:0.0} px ({err * _meta.Resolution:0.00} m)";
         }
-        DxfAlignText.Text = msg;
+        SetAlignText(msg);
         SetStatus(msg);
     }
 
@@ -374,6 +389,12 @@ public partial class MainWindow
         _alignStep = 0;
         _alignMarks.Clear();
         RefreshMarkers();
-        if (resetText) DxfAlignText.Text = "-";
+        if (resetText) SetAlignText("");
+    }
+
+    private void SetAlignText(string text)
+    {
+        DxfAlignText.Text = text;
+        DxfAlignText.Visibility = text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 }

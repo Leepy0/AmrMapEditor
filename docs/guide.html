@@ -226,9 +226,9 @@ footer { padding: 56px 0 48px; color: var(--muted); font-size: .88rem; }
       <h2>화면 구성</h2>
       <p class="intro">각 부분을 누르면 설명이 나옵니다. 오른쪽 패널의 탭도 눌러볼 수 있습니다.</p>
       <div class="window">
-        <div class="w-title">AMR Map Editor - sample_updated.pgm *</div>
+        <div class="w-title">sample_updated.pgm — 편집됨 · AMR Map Editor</div>
         <button class="zone w-bar" data-zone="bar" aria-pressed="false">
-          <i>열기</i><i>저장</i><i>다른 이름으로 저장</i><i>실행 취소</i><i>다시 실행</i><i>화면 맞춤</i><i>표시: 표준</i><i>☑ 픽셀 격자</i>
+          <i>열기</i><i>저장</i><i>다른 이름으로</i><i>↶</i><i>↷</i><i>표준 | 확률 | 분류 | 원본</i><i>격자</i><i>화면 맞춤</i><i>?</i>
         </button>
         <div class="w-body">
           <button class="zone w-tools" data-zone="tools" aria-pressed="false">
@@ -240,16 +240,16 @@ footer { padding: 56px 0 48px; color: var(--muted); font-size: .88rem; }
           </button>
           <div class="w-panel">
             <div class="w-tabs" role="tablist" aria-label="오른쪽 패널 탭">
-              <button role="tab" aria-selected="false" data-tab="basic">기본</button>
-              <button role="tab" aria-selected="true" data-tab="update">업데이트 보정</button>
-              <button role="tab" aria-selected="false" data-tab="cleanup">맵 정리</button>
+              <button role="tab" aria-selected="false" data-tab="basic">편집</button>
+              <button role="tab" aria-selected="true" data-tab="update">업데이트</button>
+              <button role="tab" aria-selected="false" data-tab="cleanup">정리</button>
               <button role="tab" aria-selected="false" data-tab="dxf">도면</button>
             </div>
             <ul class="w-groups" id="wgroups"></ul>
           </div>
         </div>
         <button class="zone w-status" data-zone="status" aria-pressed="false">
-          <span>px (212, 154)</span><span>m (9.625, 6.275)</span><span>254 (0xFE) 장애물</span><span>240%</span>
+          <span>254 (0xFE) 장애물</span><span>212, 154 px</span><span>9.625, 6.275 m</span><span>240%</span>
         </button>
       </div>
       <div class="explain" id="explain" aria-live="polite"></div>
@@ -260,7 +260,7 @@ footer { padding: 56px 0 48px; color: var(--muted); font-size: .88rem; }
   <section id="update">
     <div class="wrap">
       <h2>기존 맵에 업데이트가 덧그려졌을 때</h2>
-      <p class="intro">업데이트는 기존 맵 위에 덧그려지므로, 위치 인식이 조금만 틀어져도 벽이 두 겹이 됩니다. 업데이트 보정 탭에서 위에서부터 차례로 진행합니다. 재생을 누르면 단계별로 넘어가며, 후보가 표시된 뒤 적용 결과로 바뀝니다.</p>
+      <p class="intro">업데이트는 기존 맵 위에 덧그려지므로, 위치 인식이 조금만 틀어져도 벽이 두 겹이 됩니다. 업데이트 탭에서 위에서부터 차례로 진행합니다. 재생을 누르면 단계별로 넘어가며, 후보가 표시된 뒤 적용 결과로 바뀝니다.</p>
       <div class="legend">
         <span style="--c:var(--c-red)">새로 생긴 장애물</span>
         <span style="--c:var(--c-blue)">사라진 장애물</span>
@@ -276,7 +276,7 @@ footer { padding: 56px 0 48px; color: var(--muted); font-size: .88rem; }
   <section id="newmap">
     <div class="wrap">
       <h2>새로 만든 맵을 정리할 때</h2>
-      <p class="intro">처음 만든 맵은 건물 축과 틀어져 있거나 벽이 계단처럼 거친 경우가 많습니다. 맵 정리 탭의 기능으로 정리하는 과정입니다.</p>
+      <p class="intro">처음 만든 맵은 건물 축과 틀어져 있거나 벽이 계단처럼 거친 경우가 많습니다. 정리 탭의 기능으로 정리하는 과정입니다.</p>
       <div class="legend">
         <span style="--c:var(--c-cyan)">끊김 후보</span>
         <span style="--c:var(--c-orange)">직선화 영역</span>
@@ -404,21 +404,21 @@ const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 // ── 화면 구성도 ──
 (() => {
   const ZONES = {
-    bar: ['상단 도구 막대', '열기, 저장, 실행 취소, 화면 맞춤을 합니다. 표시 방식은 표준, 확률값 컬러맵, 분류(확률값을 주황으로), 원본 그레이 중 고릅니다.'],
-    tools: ['도구', '칠하기 도구 6개, 영역 선택 2개, 정리 도구 4개가 있습니다. 괄호 속 글자가 단축키입니다. 선택 영역이 있으면 칠하기는 그 안에서만 적용됩니다.'],
+    bar: ['상단 도구 막대', '같은 크기의 아이콘 버튼으로 열기, 저장, 실행 취소를 합니다. 가운데에서 표시 방식(표준 · 확률 · 분류 · 원본)을 한 번에 고르고, 오른쪽에 픽셀 격자, 화면 맞춤, 단축키 도움말(?)이 있습니다. 버튼에 마우스를 올리면 이름과 단축키가 나옵니다.'],
+    tools: ['도구', '칠하기 도구 6개, 영역 선택 2개, 정리 도구 4개가 아이콘으로 있습니다. 마우스를 올리면 이름과 단축키가 나옵니다. 맨 아래 색 칩은 지금 칠하는 값입니다.'],
     map: ['맵 화면', '휠로 확대하고 가운데 버튼이나 Space를 누른 채 끌어 이동합니다. 1200% 이상 확대하면 픽셀 격자가 보입니다. 기준 맵을 열면 달라진 곳이 색으로 칠해집니다.'],
     status: ['상태 표시줄', '커서 아래 픽셀의 좌표, yaml 기준 실제 좌표(m), 픽셀 값과 뜻, 확대 배율, 방금 한 작업의 결과가 표시됩니다.'],
   };
   const TABS = {
-    basic: ['파일, 해상도', '장애물 판정값', '그리기 값, 브러시 크기', '선택 영역', '보호 영역'],
-    update: ['1 기준 맵 열기', '2 업데이트 영역', '3 영역 밖 변경 복원', '4 어긋남 확인, 재정렬', '5 이중 벽 정리', '6 변경 영역 확인', '7 마무리'],
-    cleanup: ['노이즈 객체 제거', '맵 주축', '벽 직선화', '기둥 정리', '벽 끊김 후보', '확률값 정리', '외곽 정리', '기울기 보정'],
-    dxf: ['DXF 열기', '레이어 표시', '2점 정렬, 값 조정'],
+    basic: ['열린 맵', '그리기 값 (Free · 장애물 · Unknown · 직접)', '브러시', '선택 영역', '보호 영역', '맵 설정 (해상도, 장애물 기준값)'],
+    update: ['✓ 기준 맵 · 변경점 표시', '2 업데이트 영역', '3 영역 밖 되돌리기', '4 어긋남 보정', '5 이중 벽 정리', '6 남은 변경 확인'],
+    cleanup: ['노이즈 제거', '벽 끊김 잇기', '벽 · 기둥 반듯하게', '확률값 정리', '외곽 정리', '기울기 보정'],
+    dxf: ['도면 열기', '레이어', '위치 맞추기 (2점 정렬)'],
   };
   const TAB_TEXT = {
-    basic: '기본 탭: 파일 정보, 장애물로 볼 값의 기준, 칠할 값과 브러시, 선택 영역, 보호 영역을 다룹니다.',
-    update: '업데이트 보정 탭: 기존 맵에 업데이트가 덧그려진 경우를 위에서부터 순서대로 보정합니다. 맨 위에 진행 상황이 표시됩니다.',
-    cleanup: '맵 정리 탭: 노이즈, 벽, 기둥, 끊김, 외곽, 기울기 등 새 맵 정리 기능이 모여 있습니다.',
+    basic: '편집 탭: 칠할 값과 브러시, 선택 영역, 보호 영역, 해상도 같은 맵 설정을 다룹니다. 탭 위의 작업 대상 막대는 지금 선택 영역이 있는지 보여줍니다. 선택 영역이 있으면 편집 · 후보 찾기 · 정리는 그 안에서만 실행됩니다.',
+    update: '업데이트 탭: 기준 맵을 열면 단계 카드가 나타납니다. 위에서부터 진행하고, 끝난 단계는 번호가 초록 체크로 바뀝니다. 세부 설명은 제목 옆 ⓘ에, 자주 안 바꾸는 값은 옵션 안에 있습니다.',
+    cleanup: '정리 탭: 노이즈, 벽 끊김, 벽 · 기둥, 확률값, 외곽, 기울기 등 새 맵 정리 기능이 카드로 모여 있습니다. 후보 찾기 결과는 찾은 뒤에만 목록으로 나타납니다.',
     dxf: '도면 탭: DXF를 겹쳐 보고 두 점을 찍어 위치를 맞춥니다.',
   };
   const explain = document.getElementById('explain');
@@ -448,18 +448,18 @@ const PLAYERS = {
   update: [
     { t: '업데이트된 맵 열기', img: 'u0_updated', zoom: true, where: '파일 열기',
       d: '현장에서 업데이트한 맵을 엽니다. 이 샘플에는 위치가 틀어진 채 덧그려진 벽, 새로 들여온 랙, 대차 캐스터가 섞여 있습니다.' },
-    { t: '기준 맵과 비교', img: 'u1_diff', zoom: true, where: '업데이트 보정 1단계',
+    { t: '기준 맵과 비교', img: 'u1_diff', zoom: true, where: '업데이트 탭 기준 맵',
       d: '업데이트 전 맵을 기준 맵으로 열면 달라진 곳이 칠해집니다. 두 맵에 yaml이 있으면 크기나 원점이 달라도 맞춰서 비교합니다.' },
-    { t: '업데이트 영역 밖 되돌리기', img: 'u2_area', after: 'u3_outside', zoom: false, where: '업데이트 보정 2~3단계',
+    { t: '업데이트 영역 밖 되돌리기', img: 'u2_area', after: 'u3_outside', zoom: false, where: '업데이트 탭 2~3단계',
       d: '이번에 다시 스캔한 범위를 업데이트 영역으로 지정하고, 그 밖에서 바뀐 픽셀을 한 번에 기준 맵 값으로 되돌립니다.',
       s: '영역 밖 변경 59 px 복원' },
-    { t: '어긋남 추정', img: 'u4_offset', zoom: true, where: '업데이트 보정 4단계',
+    { t: '어긋남 추정', img: 'u4_offset', zoom: true, where: '업데이트 탭 4단계',
       d: '새로 생긴 벽을 기존 벽(청록)에 맞춰 보고 얼마나 밀렸는지 계산합니다. 일정하게 밀려 있으면 업데이트 당시 위치 인식이 틀어진 것입니다.',
       s: 'dx −3 px, dy −4 px, 회전 0°, 겹침 81 %' },
-    { t: '이중 벽 정리', img: 'u5_dups', after: 'u6_dup_restored', zoom: true, where: '업데이트 보정 5단계',
+    { t: '이중 벽 정리', img: 'u5_dups', after: 'u6_dup_restored', zoom: true, where: '업데이트 탭 5단계',
       d: '기존 벽 바로 옆에 붙은 새 벽을 후보로 찾고, 확인한 뒤 기준 맵 값으로 되돌립니다. 기존 벽이 남습니다.',
       s: '후보 2개 (414 px, 220 px)' },
-    { t: '노이즈 제거', img: 'u7_noise', after: 'u8_final_diff', zoom: true, where: '맵 정리 탭',
+    { t: '노이즈 제거', img: 'u7_noise', after: 'u8_final_diff', zoom: true, where: '정리 탭',
       d: '캐스터 같은 작은 덩어리를 면적과 크기 조건으로 찾아 한 번에 지웁니다. 건물 기둥처럼 큰 덩어리는 대상에서 빠집니다.',
       s: '캐스터 20개 삭제' },
     { t: '결과 확인', img: 'u9_final', zoom: false, where: '저장',
@@ -469,10 +469,10 @@ const PLAYERS = {
   newmap: [
     { t: '처음 만든 맵', img: 'n0_original', zoom: false, where: '파일 열기',
       d: '건물 축과 4° 틀어져 있고, 벽이 계단처럼 거칠며, 창문 너머로 찍힌 점과 캐스터가 흩어져 있습니다.' },
-    { t: '기울기 보정', img: 'n1_deskew', zoom: true, where: '맵 정리 탭',
+    { t: '기울기 보정', img: 'n1_deskew', zoom: true, where: '정리 탭',
       d: '벽 방향으로 맵의 주축을 계산해 수평·수직으로 돌립니다. 좌표계가 바뀌므로 스테이션을 가르치기 전에만 씁니다. 저장할 때 yaml 원점도 갱신합니다.',
       s: '주축 4.00°, 460×380 → 486×412 px' },
-    { t: '벽 끊김 연결', img: 'n2_gaps', zoom: false, where: '맵 정리 탭',
+    { t: '벽 끊김 연결', img: 'n2_gaps', zoom: false, where: '정리 탭',
       d: '유리나 반사면 때문에 끊긴 곳을 후보로 찾아 이어 줍니다. 아래쪽 출입구는 최대 틈 조건보다 넓어서 후보에서 빠집니다.',
       s: '후보 2곳 (10 px, 6 px)' },
     { t: '벽 직선화', img: 'n3a_wall_regions', after: 'n3_walls', zoom: true, where: '벽 직선화 도구 W',
@@ -481,10 +481,10 @@ const PLAYERS = {
     { t: '기둥 정리', img: 'n4a_pillars', after: 'n4_pillars', zoom: true, where: '기둥 정리 도구 C',
       d: '기둥을 누르면 한두 면만 찍힌 L자 모양도 주축에 맞춘 사각형으로 바뀝니다.',
       s: '기둥 5개' },
-    { t: '외곽 정리', img: 'n5a_outer', after: 'n5_outer', zoom: true, where: '맵 정리 탭',
+    { t: '외곽 정리', img: 'n5a_outer', after: 'n5_outer', zoom: true, where: '정리 탭',
       d: '건물 외곽을 폴리곤으로 잡고 그 바깥을 Unknown으로 바꿔, 창문 너머로 찍힌 점을 지웁니다.',
       s: '492 px 정리' },
-    { t: '노이즈 제거', img: 'n6a_noise', after: 'n6_final', zoom: true, where: '맵 정리 탭',
+    { t: '노이즈 제거', img: 'n6a_noise', after: 'n6_final', zoom: true, where: '정리 탭',
       d: '남은 캐스터 점을 찾아 지우면 정리가 끝납니다.',
       s: '캐스터 15개 삭제' },
   ],

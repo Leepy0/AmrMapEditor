@@ -58,7 +58,7 @@ public partial class MainWindow
         EditTool.Select => "영역 선택: 드래그, 클릭 = 해제",
         EditTool.Polygon => "폴리곤 선택: 클릭으로 꼭짓점, 더블클릭/Enter 완료, Backspace 되돌리기, Esc 취소",
         EditTool.BlobPick => "객체 삭제: 클릭한 장애물 덩어리 전체를 Free로",
-        EditTool.Wall => "벽 직선화: 벽 하나를 감싸듯 드래그 (맵 정리 탭에서 두께·스냅 설정)",
+        EditTool.Wall => "벽 직선화: 벽 하나를 감싸듯 드래그 (정리 탭 › 벽 · 기둥 옵션에서 두께·스냅 설정)",
         EditTool.Pillar => "기둥 정리: 기둥을 클릭하면 사각형으로 정리",
         _ => "복원 브러시: 칠한 부분을 기준 맵 값으로 되돌림",
     };
@@ -104,7 +104,7 @@ public partial class MainWindow
             case EditTool.Restore:
                 if (_tool == EditTool.Restore && _reference == null)
                 {
-                    SetStatus("복원 브러시는 기준 맵이 필요합니다. 업데이트 보정 탭에서 기준 맵을 먼저 여세요.");
+                    SetStatus("복원 브러시는 기준 맵이 필요합니다. 업데이트 탭에서 기준 맵을 먼저 여세요.");
                     return;
                 }
                 BeginEdit(ToolName(_tool));
@@ -390,9 +390,16 @@ public partial class MainWindow
     private void UpdateValueUi()
     {
         uint c = _lut[_drawValue];
-        ValueSwatch.Background = new SolidColorBrush(Color.FromRgb((byte)(c >> 16), (byte)(c >> 8), (byte)c));
-        ValueText.Text = MapValues.Describe(_drawValue);
+        var swatch = new SolidColorBrush(Color.FromRgb((byte)(c >> 16), (byte)(c >> 8), (byte)c));
+        swatch.Freeze();
+        string desc = MapValues.Describe(_drawValue);
+        ValueSwatch.Background = swatch;
+        ValueText.Text = desc;
+        RailSwatch.Background = swatch;
+        RailSwatchButton.ToolTip = $"그리기 값  {desc}\n1 Free · 2 장애물 · 3 Unknown";
     }
+
+    private void OnRailSwatchClick(object sender, RoutedEventArgs e) => SegEdit.IsChecked = true;
 
     private void OnBrushSizeChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
@@ -413,18 +420,36 @@ public partial class MainWindow
         UpdateSelectionUi();
     }
 
+    /// <summary>작업 대상 표시 (선택 영역 / 맵 전체)와 선택 영역이 필요한 버튼 활성화</summary>
     private void UpdateSelectionUi()
     {
+        bool has = _selection != null;
         if (_selection is PixelRegion s)
         {
             double res = _meta.Resolution;
-            SelectionText.Text = $"{s}\n≈ {s.Bounds.Width * res:0.00} × {s.Bounds.Height * res:0.00} m";
+            string kind = s.IsRect ? "사각형" : "폴리곤";
+            ScopeText.Text = $"{kind}  {s.Bounds.Width} × {s.Bounds.Height} px · {s.Bounds.Width * res:0.##} × {s.Bounds.Height * res:0.##} m";
         }
         else
         {
-            SelectionText.Text = "없음 (영역 선택 M, 폴리곤 선택 P)";
+            ScopeText.Text = "대상  맵 전체";
         }
+        ScopeBar.Background = Res(has ? "AccentSoftBrush" : "CardBrush");
+        ScopeBar.BorderBrush = has ? Res("AccentSoftBrush") : Res("CardLineBrush");
+        ScopeIcon.Stroke = Res(has ? "AccentBrush" : "SecondaryLabelBrush");
+        ScopeText.Foreground = Res(has ? "LabelBrush" : "SecondaryLabelBrush");
+        ScopeClearButton.Visibility = has ? Visibility.Visible : Visibility.Collapsed;
+
+        FillSelectionButton.IsEnabled = has;
+        AddProtectButton.IsEnabled = has;
+        AddAreaButton.IsEnabled = has;
+        RestoreSelectionButton.IsEnabled = has;
+        StraightenButton.IsEnabled = has;
+        ClearOutsideButton.IsEnabled = has;
     }
+
+    /// <summary>상태 메시지용 작업 대상 이름</summary>
+    private string ScopeName() => _selection != null ? "선택 영역" : "맵 전체";
 
     private void OnFillSelection(object sender, RoutedEventArgs e)
     {
