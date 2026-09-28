@@ -224,7 +224,12 @@ public static class WallCleanup
         }
 
         // 새 직선 그리기
-        double half = (thickness - 1) / 2.0 + 1e-6;
+        // half는 축 정렬(수평/수직) 기준으로는 (thickness-1)/2로도 정확히 thickness줄이 선택되지만,
+        // 스냅되지 않은 임의 각도에서는 픽셀 중심이 격자에 맞지 않아 폭이 1px 부족해진다.
+        // thickness=1인 대각선 벽은 이 부족분 때문에 해당 폭 안에 픽셀 중심이 하나도 안 걸려
+        // 아무것도 그려지지 않고(기존 벽은 지워졌으므로) 벽 전체가 사라지는 문제가 있었다.
+        // thickness/2를 쓰면 축 정렬 시엔 폭이 그대로 유지되면서 임의 각도에서도 항상 최소 1줄은 그려진다.
+        double half = thickness / 2.0 + 1e-9;
         IntRect box = LineBox(tmin, tmax, cn, half, dxv, dyv, nxv, nyv).Intersect(map.Bounds);
         for (int y = box.Y; y < box.Bottom; y++)
         for (int x = box.X; x < box.Right; x++)
