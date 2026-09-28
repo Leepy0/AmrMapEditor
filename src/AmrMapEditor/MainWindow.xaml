@@ -223,7 +223,7 @@
                             <Path Style="{StaticResource Icon}" Data="{StaticResource I.Restore}" />
                         </RadioButton>
                         <RadioButton x:Name="ToolWall" Style="{StaticResource ToolRadio}" Tag="Wall" Checked="OnToolChecked"
-                                     ToolTip="벽 직선화  W&#x0a;벽 하나를 감싸듯 드래그하면 직선으로 다시 그립니다.">
+                                     ToolTip="벽 직선화  W&#x0a;벽(들)을 감싸듯 드래그하면 직선으로 다시 그립니다. 여러 벽도 각각 인식합니다.">
                             <Path Style="{StaticResource Icon}" Data="{StaticResource I.Wall}" />
                         </RadioButton>
                         <RadioButton x:Name="ToolPillar" Style="{StaticResource ToolRadio}" Tag="Pillar" Checked="OnToolChecked"
@@ -893,7 +893,7 @@
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource CardTitle}" Text="벽 · 기둥 반듯하게" />
                                         <ContentControl Style="{StaticResource InfoTip}"
-                                                        ToolTip="벽 직선화 도구(W): 벽 하나를 감싸듯 드래그하면 직선으로 다시 그립니다. 끊긴 구간도 이어서 그립니다.&#x0a;기둥 정리 도구(C): 기둥을 클릭하면 감싸는 사각형으로 바꿉니다.&#x0a;맵 주축(벽 방향)과 허용 각도 이내면 정확히 맞춥니다." />
+                                                        ToolTip="벽 직선화 도구(W): 벽(들)을 감싸듯 드래그하면 직선으로 다시 그립니다. 영역 안에 벽이 여러 개 있어도 각각 인식해 처리하며, 같은 벽의 끊긴 구간은 이어서 그립니다.&#x0a;기둥 정리 도구(C): 기둥을 클릭하면 감싸는 사각형으로 바꿉니다.&#x0a;맵 주축(벽 방향)과 허용 각도 이내면 정확히 맞춥니다." />
                                     </StackPanel>
                                     <Grid Margin="0,10,0,0">
                                         <Grid.ColumnDefinitions>
@@ -908,7 +908,7 @@
                                         </Button>
                                     </Grid>
                                     <Button x:Name="StraightenButton" Margin="0,8,0,0" Click="OnStraightenSelection" IsEnabled="False"
-                                            ToolTip="선택 영역 안의 벽을 직선으로 다시 그립니다.">
+                                            ToolTip="선택 영역 안의 벽을 직선으로 다시 그립니다. 벽이 여러 개면 각각 인식해 처리합니다.">
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Wall}" />
                                             <TextBlock Text="선택 영역 직선화" />

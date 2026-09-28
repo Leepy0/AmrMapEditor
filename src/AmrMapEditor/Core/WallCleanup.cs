@@ -147,29 +147,117 @@ public static class WallCleanup
 
     // ───────────── 벽 직선화 ─────────────
 
+    /// <summary>같은 벽의 끊긴 구간으로 볼 최대 간격(px). 이보다 멀리 떨어진 장애물 덩어리는 별개 벽으로 취급</summary>
+    private const int StraightenClusterGap = 4;
+
     /// <summary>
-    /// 영역 안 장애물 픽셀에 직선을 피팅해 지정 두께의 직선으로 다시 그림.
-    /// thickness 0 = 자동. axisDeg가 있으면 주축(±90°) 근처 각도는 스냅
+    /// 영역 안 장애물 픽셀을 벽 단위(덩어리)로 나눠 각각 직선에 피팅해 지정 두께의 직선으로 다시 그림.
+    /// 벽이 여러 개 포함된 영역이어도 각 벽을 독립적으로 인식해 처리한다.
+    /// (같은 벽 안의 끊긴 구간은 <see cref="StraightenClusterGap"/> px 이내면 이어서 하나로 봄)
+    /// thickness 0 = 벽마다 자동 추정. axisDeg가 있으면 주축(±90°) 근처 각도는 벽마다 스냅
     /// </summary>
-    public static StraightenResult? Straighten(PixelRegion region, byte thr, int thickness, double? axisDeg,
-                                               double snapTolDeg, EditTracker t)
+    public static List<StraightenResult> Straighten(PixelRegion region, byte thr, int thickness, double? axisDeg,
+                                                     double snapTolDeg, EditTracker t)
     {
         MapImage map = t.Map;
+        var results = new List<StraightenResult>();
         IntRect scan = region.Bounds.Intersect(map.Bounds);
-        var xs = new List<double>();
-        var ys = new List<double>();
+        if (scan.IsEmpty) return results;
+
+        var pts = new List<(int X, int Y)>();
         for (int y = scan.Y; y < scan.Bottom; y++)
         for (int x = scan.X; x < scan.Right; x++)
             if (map.Get(x, y) >= thr && region.Contains(x, y))
-            {
-                xs.Add(x + 0.5);
-                ys.Add(y + 0.5);
-            }
-        int n = xs.Count;
-        if (n < 5) return null;
+                pts.Add((x, y));
+        if (pts.Count < 5) return results;
 
-        // 꺾인 벽: 직선 하나로 피팅하면 대각선이 되어 모서리가 사라지므로 직교 구간별로 다시 그림
-        StraightenResult? multi = StraightenSegments(region, scan, xs, ys, thr, thickness, axisDeg, snapTolDeg, t);
+        foreach (List<int> cluster in ClusterPoints(pts, scan, StraightenClusterGap))
+        {
+            if (cluster.Count < 5) continue;
+            var clusterPts = new List<(int X, int Y)>(cluster.Count);
+            foreach (int i in cluster) clusterPts.Add(pts[i]);
+            StraightenResult? r = StraightenCluster(clusterPts, thickness, axisDeg, snapTolDeg, region, t);
+            if (r != null) results.Add(r);
+        }
+        return results;
+    }
+
+    /// <summary>
+    /// 점들을 gapTol px 이내로 가까운 것끼리 묶어 그룹으로 나눔 (같은 벽의 끊긴 구간은 이어붙이고,
+    /// 멀리 떨어진 별개의 벽은 분리). scan 크기의 격자로 각 점의 위치를 찾아 주변 gapTol 범위를 훑는 방식
+    /// </summary>
+    private static List<List<int>> ClusterPoints(List<(int X, int Y)> pts, IntRect scan, int gapTol)
+    {
+        int w = scan.Width, h = scan.Height;
+        var idxAt = new int[w * h];
+        Array.Fill(idxAt, -1);
+        for (int i = 0; i < pts.Count; i++)
+        {
+            (int x, int y) = pts[i];
+            idxAt[(y - scan.Y) * w + (x - scan.X)] = i;
+        }
+
+        var visited = new bool[pts.Count];
+        var groups = new List<List<int>>();
+        var stack = new List<int>();
+
+        for (int i = 0; i < pts.Count; i++)
+        {
+            if (visited[i]) continue;
+            visited[i] = true;
+            var group = new List<int> { i };
+            stack.Clear();
+            stack.Add(i);
+            while (stack.Count > 0)
+            {
+                int cur = stack[^1];
+                stack.RemoveAt(stack.Count - 1);
+                (int cx, int cy) = pts[cur];
+                int lx = cx - scan.X, ly = cy - scan.Y;
+                int y0 = Math.Max(0, ly - gapTol), y1 = Math.Min(h - 1, ly + gapTol);
+                int x0 = Math.Max(0, lx - gapTol), x1 = Math.Min(w - 1, lx + gapTol);
+                for (int ny = y0; ny <= y1; ny++)
+                for (int nx = x0; nx <= x1; nx++)
+                {
+                    int ni = idxAt[ny * w + nx];
+                    if (ni < 0 || visited[ni]) continue;
+                    visited[ni] = true;
+                    group.Add(ni);
+                    stack.Add(ni);
+                }
+            }
+            groups.Add(group);
+        }
+        return groups;
+    }
+
+    /// <summary>벽 하나(점 덩어리)에 직선을 피팅해 지정 두께로 다시 그림</summary>
+    private static StraightenResult? StraightenCluster(List<(int X, int Y)> pts, int thickness, double? axisDeg,
+                                                        double snapTolDeg, PixelRegion region, EditTracker t)
+    {
+        MapImage map = t.Map;
+        int n = pts.Count;
+        if (n < 5) return null;
+        var xs = new double[n];
+        var ys = new double[n];
+        int minX = int.MaxValue, minY = int.MaxValue, maxX = int.MinValue, maxY = int.MinValue;
+        for (int k = 0; k < n; k++)
+        {
+            (int x, int y) = pts[k];
+            xs[k] = x + 0.5;
+            ys[k] = y + 0.5;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+        }
+
+        // 꺾인 벽(ㄱ·ㄴ·T자): 직선 하나로 피팅하면 대각선이 되어 모서리가 사라지므로 직교 구간별로 다시 그림.
+        // 지우는 범위는 이 벽 덩어리 주변으로 한정 (같은 선택 영역의 다른 벽 보호)
+        int segPad = (thickness > 0 ? thickness : 15) / 2 + 6;
+        IntRect clusterScan = new IntRect(minX - segPad, minY - segPad, maxX - minX + 1 + 2 * segPad, maxY - minY + 1 + 2 * segPad)
+            .Intersect(map.Bounds);
+        StraightenResult? multi = StraightenSegments(region, clusterScan, xs, ys, thickness, axisDeg, snapTolDeg, t);
         if (multi != null) return multi;
 
         // PCA
@@ -225,8 +313,12 @@ public static class WallCleanup
         // 축 정렬 시 정확히 thickness 픽셀이 되도록 중심선 위치 보정
         cn = thickness % 2 == 1 ? Math.Floor(cn) + 0.5 : Math.Round(cn);
 
-        // 기존 벽(띠 영역의 장애물·확률값) 지우기
+        // 기존 벽(띠 영역의 장애물·확률값) 지우기. 이 벽 덩어리 주변으로만 범위를 한정해
+        // 같은 선택 영역 안의 다른 벽(다른 덩어리)을 건드리지 않는다.
         double band = thickness / 2.0 + 2;
+        int pad = (int)Math.Ceiling(band) + 2;
+        IntRect scan = new IntRect(minX - pad, minY - pad, maxX - minX + 1 + 2 * pad, maxY - minY + 1 + 2 * pad)
+            .Intersect(map.Bounds);
         for (int y = scan.Y; y < scan.Bottom; y++)
         for (int x = scan.X; x < scan.Right; x++)
         {
@@ -239,7 +331,12 @@ public static class WallCleanup
         }
 
         // 새 직선 그리기
-        double half = (thickness - 1) / 2.0 + 1e-6;
+        // half는 축 정렬(수평/수직) 기준으로는 (thickness-1)/2로도 정확히 thickness줄이 선택되지만,
+        // 스냅되지 않은 임의 각도에서는 픽셀 중심이 격자에 맞지 않아 폭이 1px 부족해진다.
+        // thickness=1인 대각선 벽은 이 부족분 때문에 해당 폭 안에 픽셀 중심이 하나도 안 걸려
+        // 아무것도 그려지지 않고(기존 벽은 지워졌으므로) 벽 전체가 사라지는 문제가 있었다.
+        // thickness/2를 쓰면 축 정렬 시엔 폭이 그대로 유지되면서 임의 각도에서도 항상 최소 1줄은 그려진다.
+        double half = thickness / 2.0 + 1e-9;
         IntRect box = LineBox(tmin, tmax, cn, half, dxv, dyv, nxv, nyv).Intersect(map.Bounds);
         for (int y = box.Y; y < box.Bottom; y++)
         for (int x = box.X; x < box.Right; x++)
@@ -265,10 +362,10 @@ public static class WallCleanup
     /// 직교하는 두 방향으로 벽 구간을 차례로 찾아 2개 이상이면 구간별로 다시 그리고,
     /// 서로 만나는 끝은 상대 벽 바깥면까지 늘려 각진 모서리를 유지. 구간이 1개면 null
     /// </summary>
-    private static StraightenResult? StraightenSegments(PixelRegion region, IntRect scan, List<double> xs, List<double> ys,
-                                                       byte thr, int thickness, double? axisDeg, double snapTolDeg, EditTracker t)
+    private static StraightenResult? StraightenSegments(PixelRegion region, IntRect scan, double[] xs, double[] ys,
+                                                       int thickness, double? axisDeg, double snapTolDeg, EditTracker t)
     {
-        int n = xs.Count;
+        int n = xs.Length;
         if (n < 20) return null;
 
         double theta = DominantAngle(xs, ys, n, t.Map.Width + t.Map.Height);
@@ -357,7 +454,7 @@ public static class WallCleanup
         double total = 0;
         foreach (WallSegment seg in segments)
         {
-            double half = (seg.Thickness - 1) / 2.0 + 1e-6;
+            double half = seg.Thickness / 2.0 + 1e-9;   // 단일 직선과 같은 폭 규칙 (임의 각도에서도 최소 1줄)
             total += seg.TMax - seg.TMin + 1;
             IntRect box = LineBox(seg.TMin, seg.TMax, seg.Cn, half, seg.Dx, seg.Dy, seg.Nx, seg.Ny).Intersect(map.Bounds);
             for (int y = box.Y; y < box.Bottom; y++)
@@ -377,11 +474,11 @@ public static class WallCleanup
     }
 
     /// <summary>deg 방향으로 남은 점이 가장 많이 모인 띠(폭 window) 찾기</summary>
-    private static WallSegment? FindBand(List<double> xs, List<double> ys, bool[] used, double deg, int window)
+    private static WallSegment? FindBand(double[] xs, double[] ys, bool[] used, double deg, int window)
     {
         double r = deg * Math.PI / 180, dx = Math.Cos(r), dy = Math.Sin(r), nx = -dy, ny = dx;
         var hist = new Dictionary<int, int>();
-        for (int k = 0; k < xs.Count; k++)
+        for (int k = 0; k < xs.Length; k++)
         {
             if (used[k]) continue;
             int b = (int)Math.Floor(xs[k] * nx + ys[k] * ny);
@@ -400,7 +497,7 @@ public static class WallCleanup
 
         double sSum = 0, tMin = double.MaxValue, tMax = double.MinValue;
         int count = 0;
-        for (int k = 0; k < xs.Count; k++)
+        for (int k = 0; k < xs.Length; k++)
         {
             if (used[k]) continue;
             double ss = xs[k] * nx + ys[k] * ny;

@@ -283,7 +283,7 @@ public partial class MainWindow
     {
         if (_selection == null)
         {
-            SetStatus("벽 하나를 감싸는 영역을 먼저 선택하세요. (또는 벽 직선화 도구 W로 드래그)");
+            SetStatus("벽을 감싸는 영역을 먼저 선택하세요. (또는 벽 직선화 도구 W로 드래그, 여러 벽도 가능)");
             return;
         }
         StraightenRegion(_selection);
@@ -296,17 +296,27 @@ public partial class MainWindow
         double? axis = WallSnapCheck.IsChecked == true ? GetAxis() : null;
 
         BeginEdit("벽 직선화", useClip: false);   // 지정한 영역 자체가 범위
-        StraightenResult? r = WallCleanup.Straighten(region, _occThreshold, thickness, axis, SnapTol(), _tracker);
+        List<StraightenResult> results = WallCleanup.Straighten(region, _occThreshold, thickness, axis, SnapTol(), _tracker);
         CommitEdit();
 
-        if (r == null)
+        if (results.Count == 0)
         {
             SetStatus("영역 안에 장애물 픽셀이 부족합니다.");
             return;
         }
-        SetStatus($"벽 직선화{(r.SegmentCount > 1 ? $" (꺾인 벽 {r.SegmentCount}구간)" : "")}: " +
-                  $"각도 {r.AngleDeg:0.00}°{(r.Snapped ? " (주축 스냅)" : "")}, 두께 {r.Thickness} px, " +
-                  $"길이 {r.LengthPx * _meta.Resolution:0.00} m" + BlockedNote());
+        if (results.Count == 1)
+        {
+            StraightenResult r = results[0];
+            SetStatus($"벽 직선화{(r.SegmentCount > 1 ? $" (꺾인 벽 {r.SegmentCount}구간)" : "")}: " +
+                      $"각도 {r.AngleDeg:0.00}°{(r.Snapped ? " (주축 스냅)" : "")}, 두께 {r.Thickness} px, " +
+                      $"길이 {r.LengthPx * _meta.Resolution:0.00} m" + BlockedNote());
+            return;
+        }
+        int snapped = results.Count(x => x.Snapped);
+        double totalLen = 0;
+        foreach (StraightenResult x in results) totalLen += x.LengthPx;
+        SetStatus($"벽 직선화: {results.Count}개 벽 인식{(snapped > 0 ? $" (스냅 {snapped}개)" : "")}, " +
+                  $"총 길이 {totalLen * _meta.Resolution:0.00} m" + BlockedNote());
     }
 
     // ───────────── 기둥 ─────────────

@@ -59,7 +59,7 @@ public partial class MainWindow
         EditTool.Select => "영역 선택: 드래그, 클릭 = 해제",
         EditTool.Polygon => "폴리곤 선택: 클릭으로 꼭짓점, 더블클릭/Enter 완료, Backspace 되돌리기, Esc 취소",
         EditTool.BlobPick => "객체 삭제: 클릭한 장애물 덩어리 전체를 Free로",
-        EditTool.Wall => "벽 직선화: 벽 하나를 감싸듯 드래그 (정리 탭 › 벽 · 기둥 옵션에서 두께·스냅 설정)",
+        EditTool.Wall => "벽 직선화: 벽(들)을 감싸듯 드래그, 여러 벽도 각각 인식 (정리 탭 › 벽 · 기둥 옵션에서 두께·스냅 설정)",
         EditTool.Pillar => "기둥 정리: 기둥을 클릭하면 사각형으로 정리",
         EditTool.CandidatePick => "후보 선택: 맵에서 후보를 클릭해 체크 / 해제",
         _ => "복원 브러시: 칠한 부분을 기준 맵 값으로 되돌림",
