@@ -50,7 +50,7 @@ public sealed class MapView : FrameworkElement
     private const double MaxZoom = 80;
     private const double GridMinZoom = 12;
 
-    private static readonly Brush BackgroundBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x3A, 0x3F, 0x47)));
+    private static readonly Brush BackgroundBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x2C, 0x2C, 0x2E)));
     private static readonly Pen ImageBorderPen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0x6B, 0x72, 0x80)), 1));
     private static readonly Pen GridPen = Frozen(new Pen(new SolidColorBrush(Color.FromArgb(90, 120, 130, 145)), 1));
     private static readonly Pen CandidatePen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0xE0, 0x1E, 0xE0)), 1.5));

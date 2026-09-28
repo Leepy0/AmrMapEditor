@@ -31,10 +31,10 @@ public partial class MainWindow
     private void UpdateUnitLabels()
     {
         double res = _meta.Resolution;
-        NoiseAreaUnitText.Text = int.TryParse(NoiseMaxAreaBox.Text, out int a) && a > 0 ? $"px  ≈ {a * res * res:0.####} m²" : "px";
-        NoiseSideUnitText.Text = int.TryParse(NoiseMaxSideBox.Text, out int s) && s > 0 ? $"px  ≈ {s * res:0.###} m" : "px";
-        DupDistUnitText.Text = double.TryParse(DupDistBox.Text, out double d) && d > 0 ? $"px 이내  ≈ {d * res:0.###} m" : "px 이내";
-        GapMaxUnitText.Text = int.TryParse(GapMaxBox.Text, out int g) && g > 0 ? $"px  ≈ {g * res:0.###} m" : "px";
+        NoiseAreaUnitText.Text = int.TryParse(NoiseMaxAreaBox.Text, out int a) && a > 0 ? $"px ≈ {a * res * res:0.####} m²" : "px";
+        NoiseSideUnitText.Text = int.TryParse(NoiseMaxSideBox.Text, out int s) && s > 0 ? $"px ≈ {s * res:0.###} m" : "px";
+        DupDistUnitText.Text = double.TryParse(DupDistBox.Text, out double d) && d > 0 ? $"px ≈ {d * res:0.###} m" : "px";
+        GapMaxUnitText.Text = int.TryParse(GapMaxBox.Text, out int g) && g > 0 ? $"px ≈ {g * res:0.###} m" : "px";
     }
 
     private BlobItem Track(BlobItem item)
@@ -45,6 +45,9 @@ public partial class MainWindow
         };
         return item;
     }
+
+    /// <summary>모두 체크돼 있으면 모두 해제, 아니면 모두 체크</summary>
+    private void ToggleAll(ICollection<BlobItem> items) => SetAllChecked(items, !items.All(i => i.IsChecked));
 
     private void SetAllChecked(IEnumerable<BlobItem> items, bool value)
     {
@@ -74,16 +77,18 @@ public partial class MainWindow
     private void RefreshMarkers()
     {
         var list = new List<MapMarker>(_candidates.Count + _dupCandidates.Count + _gapCandidates.Count + 8);
-        CandidateCountText.Text = AddMarkers(list, _candidates, MarkerKind.Candidate);
-        DupCountText.Text = AddMarkers(list, _dupCandidates, MarkerKind.Duplicate);
-        GapCountText.Text = AddMarkers(list, _gapCandidates, MarkerKind.Gap);
+        AddMarkers(list, _candidates, MarkerKind.Candidate, NoiseResults, NoiseAllCheck, CandidateCountText);
+        AddMarkers(list, _dupCandidates, MarkerKind.Duplicate, DupResults, DupAllCheck, DupCountText);
+        AddMarkers(list, _gapCandidates, MarkerKind.Gap, GapResults, GapAllCheck, GapCountText);
         foreach (PointD m in _alignMarks)
             list.Add(new MapMarker(new IntRect((int)Math.Floor(m.X) - 2, (int)Math.Floor(m.Y) - 2, 5, 5), MarkerKind.Focus));
         if (_focusMarker is MapMarker f) list.Add(f);
         MapViewer.Markers = list;
     }
 
-    private static string AddMarkers(List<MapMarker> list, IEnumerable<BlobItem> items, MarkerKind kind)
+    /// <summary>후보 마커 추가 + 목록 영역 표시 / 전체 체크 상태 / 개수 갱신</summary>
+    private static void AddMarkers(List<MapMarker> list, IEnumerable<BlobItem> items, MarkerKind kind,
+        FrameworkElement results, CheckBox allCheck, TextBlock countText)
     {
         int total = 0, chk = 0;
         foreach (BlobItem c in items)
@@ -92,7 +97,9 @@ public partial class MainWindow
             if (c.IsChecked) chk++;
             list.Add(new MapMarker(c.Blob.Bounds, c.IsChecked ? kind : MarkerKind.Excluded));
         }
-        return total == 0 ? "후보 없음" : $"후보 {total:N0}개 · 체크 {chk:N0}개";
+        results.Visibility = total > 0 ? Visibility.Visible : Visibility.Collapsed;
+        allCheck.IsChecked = chk == 0 ? false : chk == total ? true : null;
+        countText.Text = $"{total:N0}개 중 {chk:N0}개 체크";
     }
 
     private double SnapTol() =>
@@ -106,17 +113,7 @@ public partial class MainWindow
         if (!ReadInt(NoiseMaxAreaBox, 1, 1_000_000, "최대 면적", out int maxArea)) return;
         if (!ReadInt(NoiseMaxSideBox, 1, 100_000, "최대 크기", out int maxSide)) return;
 
-        PixelRegion? region = null;
-        if (NoiseInSelectionCheck.IsChecked == true)
-        {
-            if (_selection == null)
-            {
-                SetStatus("선택 영역이 없습니다. 영역을 선택한 뒤 다시 검출하세요.");
-                return;
-            }
-            region = _selection;
-        }
-
+        PixelRegion? region = _selection;   // 선택 영역이 있으면 그 안에서만
         var sw = Stopwatch.StartNew();
         List<Blob> blobs;
         using (new WaitCursor())
@@ -131,7 +128,7 @@ public partial class MainWindow
         _bulk = false;
         _focusMarker = null;
         RefreshMarkers();
-        SetStatus($"노이즈 후보 {blobs.Count:N0}개 ({sw.ElapsedMilliseconds} ms)" + (excluded > 0 ? $" · 보호 영역 {excluded}개 제외" : ""));
+        SetStatus($"노이즈 후보 {blobs.Count:N0}개 · {ScopeName()} ({sw.ElapsedMilliseconds} ms)" + (excluded > 0 ? $" · 보호 영역 {excluded}개 제외" : ""));
     }
 
     private void OnCandidateSelected(object sender, SelectionChangedEventArgs e)
@@ -139,9 +136,7 @@ public partial class MainWindow
         if (CandidateList.SelectedItem is BlobItem item) FocusOn(item.Blob.Bounds);
     }
 
-    private void OnCheckAllCandidates(object sender, RoutedEventArgs e) => SetAllChecked(_candidates, true);
-
-    private void OnUncheckAllCandidates(object sender, RoutedEventArgs e) => SetAllChecked(_candidates, false);
+    private void OnToggleAllCandidates(object sender, RoutedEventArgs e) => ToggleAll(_candidates);
 
     private void OnDeleteCandidates(object sender, RoutedEventArgs e)
     {
@@ -173,7 +168,7 @@ public partial class MainWindow
         Blob? blob = BlobDetector.ComponentAt(_map, x, y, _occThreshold);
         if (blob == null)
         {
-            SetStatus($"장애물 픽셀이 아닙니다 ({MapValues.Describe(_map.Get(x, y))}, 판정값 {_occThreshold} 이상만 대상)");
+            SetStatus($"장애물 픽셀이 아닙니다 ({MapValues.Describe(_map.Get(x, y))}, 장애물 기준값 {_occThreshold} 이상만 대상)");
             return;
         }
         if (blob.Area > BlobPickWarnArea && !ConfirmLargeBlob(blob, "객체 삭제", "벽체와 연결된 부분일 수 있습니다. 삭제할까요?"))
@@ -208,8 +203,11 @@ public partial class MainWindow
         return _axis;
     }
 
-    private void UpdateAxisText() =>
-        AxisText.Text = _axis is double a ? $"{a:+0.00;-0.00;0.00}° (가로축 기준)" : _map == null ? "계산 전" : "계산 전 (필요 시 자동)";
+    private void UpdateAxisText()
+    {
+        AxisText.Text = _axis is double a ? $"{a:+0.00;-0.00;0.00}°" : "계산 전";
+        AxisText.ToolTip = _axis != null ? "가로축 기준 벽 방향" : "벽 직선화 · 기둥 정리 때 자동으로 계산합니다.";
+    }
 
     private void OnEstimateAxis(object sender, RoutedEventArgs e)
     {
@@ -291,17 +289,7 @@ public partial class MainWindow
         if (!ReadInt(GapMaxBox, 1, 500, "최대 틈", out int maxGap)) return;
         if (!ReadInt(GapMinRunBox, 2, 10000, "양쪽 벽 최소 길이", out int minRun)) return;
 
-        PixelRegion? region = null;
-        if (GapInSelectionCheck.IsChecked == true)
-        {
-            if (_selection == null)
-            {
-                SetStatus("선택 영역이 없습니다.");
-                return;
-            }
-            region = _selection;
-        }
-
+        PixelRegion? region = _selection;   // 선택 영역이 있으면 그 안에서만
         List<Blob> gaps;
         using (new WaitCursor())
             gaps = WallCleanup.FindGaps(_map, _occThreshold, maxGap, minRun, region);
@@ -317,7 +305,7 @@ public partial class MainWindow
         RefreshMarkers();
 
         string tilt = _axis is double a && Math.Abs(a) > 0.5 ? $" · 맵이 {a:0.0}° 기울어져 있어 검출이 적을 수 있음" : "";
-        SetStatus($"벽 끊김 후보 {gaps.Count:N0}개 (기본 체크 해제, 확인 후 체크)" +
+        SetStatus($"벽 끊김 후보 {gaps.Count:N0}개 · {ScopeName()} (확인 후 체크)" +
                   (excluded > 0 ? $" · 보호 영역 {excluded}개 제외" : "") + tilt);
     }
 
@@ -326,9 +314,7 @@ public partial class MainWindow
         if (GapList.SelectedItem is BlobItem item) FocusOn(item.Blob.Bounds);
     }
 
-    private void OnCheckAllGaps(object sender, RoutedEventArgs e) => SetAllChecked(_gapCandidates, true);
-
-    private void OnUncheckAllGaps(object sender, RoutedEventArgs e) => SetAllChecked(_gapCandidates, false);
+    private void OnToggleAllGaps(object sender, RoutedEventArgs e) => ToggleAll(_gapCandidates);
 
     private void OnFillGaps(object sender, RoutedEventArgs e)
     {
@@ -357,7 +343,7 @@ public partial class MainWindow
         if (!ReadInt(FreeMaxBox, 1, 253, "Free 기준", out int freeMax)) return;
         if (freeMax >= _occThreshold)
         {
-            SetStatus($"Free 기준({freeMax})은 장애물 판정값({_occThreshold})보다 작아야 합니다.");
+            SetStatus($"Free 기준({freeMax})은 장애물 기준값({_occThreshold})보다 작아야 합니다.");
             return;
         }
         if (_selection == null &&

@@ -22,6 +22,9 @@ public partial class MainWindow : Window
 {
     private const string PgmFilter = "PGM 맵 (*.pgm)|*.pgm|모든 파일 (*.*)|*.*";
 
+    // 입력값 오류 표시 (Apple 시스템 빨강)
+    private static readonly Brush ErrorBrush = CreateFrozen(Color.FromRgb(0xFF, 0x3B, 0x30));
+
     // InitializeComponent 중 발생하는 Checked/TextChanged 이벤트 무시용
     private readonly bool _ready;
     private readonly AppSettings _settings = AppSettings.Load();
@@ -90,6 +93,8 @@ public partial class MainWindow : Window
         UpdateTitle();
         UpdateUndoButtons();
         UpdateInfo();
+        UpdateSelectionUi();
+        RefreshMarkers();
         RefreshUpdateGuide();
     }
 
@@ -506,11 +511,10 @@ public partial class MainWindow : Window
         MapViewer.Refresh();
     }
 
-    private void OnDisplayModeChanged(object sender, SelectionChangedEventArgs e)
+    private void OnDisplayModeChanged(object sender, RoutedEventArgs e)
     {
         if (!_ready) return;
-        if ((DisplayModeCombo.SelectedItem as ComboBoxItem)?.Tag is string tag &&
-            Enum.TryParse(tag, out MapDisplayMode mode))
+        if (sender is RadioButton { Tag: string tag } && Enum.TryParse(tag, out MapDisplayMode mode))
         {
             _lut = MapPalettes.Create(mode);
             RedrawBase(Full);
@@ -530,7 +534,7 @@ public partial class MainWindow : Window
         }
         else
         {
-            ResolutionBox.BorderBrush = Brushes.Red;
+            ResolutionBox.BorderBrush = ErrorBrush;
         }
     }
 
@@ -549,7 +553,7 @@ public partial class MainWindow : Window
         }
         else
         {
-            OccThresholdBox.BorderBrush = Brushes.Red;
+            OccThresholdBox.BorderBrush = ErrorBrush;
         }
     }
 
@@ -676,21 +680,33 @@ public partial class MainWindow : Window
     private void UpdateTitle()
     {
         string name = _path != null ? Path.GetFileName(_path) : "";
-        Title = _map == null ? "AMR Map Editor" : $"AMR Map Editor - {name}{(_dirty ? " *" : "")}";
+        Title = _map == null ? "AMR Map Editor" : $"{name}{(_dirty ? " — 편집됨" : "")} · AMR Map Editor";
     }
 
+    /// <summary>파일 정보와 맵 유무에 따른 화면 상태 (빈 화면 안내, 인스펙터 활성)</summary>
     private void UpdateInfo()
     {
+        bool open = _map != null;
+        EmptyState.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+        InspectorBody.IsEnabled = open;
+        SaveButton.IsEnabled = open;
+        SaveAsButton.IsEnabled = open;
+
         if (_map == null)
         {
-            InfoText.Text = "맵을 열어주세요. (Ctrl+O 또는 파일 끌어놓기)";
+            FileNameText.Text = "열린 맵 없음";
+            FileMetaText.Text = "Ctrl+O 또는 파일을 끌어놓으세요";
+            FileMetaText.ToolTip = null;
             return;
         }
         string yaml = _meta.SourcePath != null
-            ? $"yaml: {Path.GetFileName(_meta.SourcePath)}  origin ({_meta.OriginX:0.###}, {_meta.OriginY:0.###})"
+            ? $"origin ({_meta.OriginX:0.###}, {_meta.OriginY:0.###})"
             : "yaml 없음 · 해상도 직접 입력";
-        string changed = _metaChanged ? "\n⚠ 기울기 보정됨 (저장 시 origin 갱신)" : "";
-        InfoText.Text = $"{Path.GetFileName(_path)}\n{_map.Width} × {_map.Height} px  ({_map.Format}, maxval {_map.MaxVal})\n{yaml}{changed}";
+        string changed = _metaChanged ? "\n⚠ 기울기 보정됨 · 저장 시 origin 갱신" : "";
+        FileNameText.Text = Path.GetFileName(_path);
+        FileMetaText.Text = $"{_map.Width} × {_map.Height} px · {yaml}{changed}";
+        FileMetaText.ToolTip = $"{_path}\n{_map.Format}, maxval {_map.MaxVal}" +
+                               (_meta.SourcePath != null ? $"\nyaml: {Path.GetFileName(_meta.SourcePath)}" : "");
     }
 
     private void UpdateCursorStatus(int x, int y)
@@ -702,15 +718,24 @@ public partial class MainWindow : Window
             StatusValue.Text = "";
             return;
         }
-        StatusPos.Text = $"px ({x}, {y})";
+        StatusPos.Text = $"{x}, {y} px";
         (double wx, double wy) = _meta.PixelToWorld(x, y, _map.Height);
-        StatusWorld.Text = $"m ({wx:0.000}, {wy:0.000})";
+        StatusWorld.Text = $"{wx:0.000}, {wy:0.000} m";
         StatusValue.Text = MapValues.Describe(_map.Get(x, y));
     }
 
     private void UpdateZoomStatus() => StatusZoom.Text = MapViewer.HasImage ? $"{MapViewer.Zoom * 100:0}%" : "";
 
     private void SetStatus(string message) => StatusMessage.Text = message;
+
+    private Brush Res(string key) => (Brush)FindResource(key);
+
+    private static Brush CreateFrozen(Color c)
+    {
+        var b = new SolidColorBrush(c);
+        b.Freeze();
+        return b;
+    }
 
     private void ShowError(string message) =>
         MessageBox.Show(this, message, "오류", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -743,7 +768,7 @@ public partial class MainWindow : Window
             box.ClearValue(Control.BorderBrushProperty);
             return;
         }
-        box.BorderBrush = Brushes.Red;
+        box.BorderBrush = ErrorBrush;
         SetStatus($"{label}: {range} 범위의 숫자로 입력하세요.");
     }
 
