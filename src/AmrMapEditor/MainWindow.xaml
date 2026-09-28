@@ -432,7 +432,7 @@
                                     <CheckBox x:Name="WallSnapCheck" Content="주축에 스냅" IsChecked="True" Margin="0,4" />
                                     <Button Content="선택 영역에 적용" Click="OnStraightenSelection" />
                                     <TextBlock Style="{StaticResource Hint}"
-                                               Text="벽 직선화 도구(W)로 벽 하나를 감싸듯 드래그하면 바로 적용됩니다. 영역 안의 끊긴 구간도 이어서 그립니다." />
+                                               Text="벽 직선화 도구(W)로 드래그하면 바로 적용됩니다. 영역 안에 벽이 여러 개 있어도 각각 인식해 직선화하며, 같은 벽의 끊긴 구간은 이어서 그립니다." />
                                 </StackPanel>
                             </GroupBox>
 
