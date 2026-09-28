@@ -95,6 +95,9 @@
                     <Button x:Name="SaveAsButton" Style="{StaticResource IconButton}" Click="OnSaveAs" ToolTip="다른 이름으로 저장  Ctrl+Shift+S">
                         <Path Style="{StaticResource Icon}" Data="{StaticResource I.SaveAs}" />
                     </Button>
+                    <Button x:Name="CloseMapButton" Style="{StaticResource IconButton}" Click="OnCloseMap" ToolTip="맵 닫기  Ctrl+W">
+                        <Path Style="{StaticResource Icon}" Data="{StaticResource I.Close}" />
+                    </Button>
                     <Border Style="{StaticResource ToolbarDivider}" />
                     <Button x:Name="UndoButton" Style="{StaticResource IconButton}" Click="OnUndo" ToolTip="실행 취소  Ctrl+Z">
                         <Path Style="{StaticResource Icon}" Data="{StaticResource I.Undo}" />
@@ -207,6 +210,10 @@
                         </RadioButton>
 
                         <Border Style="{StaticResource RailDivider}" />
+                        <RadioButton x:Name="ToolPick" Style="{StaticResource ToolRadio}" Tag="CandidatePick" Checked="OnToolChecked"
+                                     ToolTip="후보 선택  V&#x0a;후보 찾기 결과를 맵에서 클릭해 체크 / 해제합니다.&#x0a;후보를 찾으면 자동으로 선택됩니다.">
+                            <Path Style="{StaticResource Icon}" Data="{StaticResource I.Pointer}" />
+                        </RadioButton>
                         <RadioButton x:Name="ToolBlobPick" Style="{StaticResource ToolRadio}" Tag="BlobPick" Checked="OnToolChecked"
                                      ToolTip="객체 삭제  D&#x0a;클릭한 장애물 덩어리 전체를 Free로.">
                             <Path Style="{StaticResource Icon}" Data="{StaticResource I.BlobDelete}" />
@@ -651,7 +658,8 @@
                                                         <ColumnDefinition Width="*" />
                                                     </Grid.ColumnDefinitions>
                                                     <CheckBox x:Name="DupAllCheck" Click="OnToggleAllDup" ToolTip="모두 체크 / 해제" />
-                                                    <TextBlock x:Name="DupCountText" Grid.Column="1" Style="{StaticResource Caption}" Margin="8,0,0,0" />
+                                                    <TextBlock x:Name="DupCountText" Grid.Column="1" Style="{StaticResource Caption}" Margin="8,0,0,0"
+                                                       ToolTip="맵에서 후보를 클릭해도 체크 / 해제됩니다 (후보 선택 도구 V)" />
                                                 </Grid>
                                                 <ListBox x:Name="DupList" MaxHeight="180" ItemTemplate="{StaticResource CheckItemTemplate}" SelectionChanged="OnDupSelected" />
                                                 <Button Style="{StaticResource PrimaryButton}" Margin="0,8,0,0" Click="OnRestoreDuplicates">
@@ -769,7 +777,8 @@
                                                 <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
                                             <CheckBox x:Name="NoiseAllCheck" Click="OnToggleAllCandidates" ToolTip="모두 체크 / 해제" />
-                                            <TextBlock x:Name="CandidateCountText" Grid.Column="1" Style="{StaticResource Caption}" Margin="8,0,0,0" />
+                                            <TextBlock x:Name="CandidateCountText" Grid.Column="1" Style="{StaticResource Caption}" Margin="8,0,0,0"
+                                                       ToolTip="맵에서 후보를 클릭해도 체크 / 해제됩니다 (후보 선택 도구 V)" />
                                         </Grid>
                                         <ListBox x:Name="CandidateList" MaxHeight="200" ItemTemplate="{StaticResource CheckItemTemplate}" SelectionChanged="OnCandidateSelected" />
                                         <Button Style="{StaticResource DestructiveButton}" Margin="0,8,0,0" Click="OnDeleteCandidates">
@@ -838,9 +847,12 @@
                                                 <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
                                             <CheckBox x:Name="GapAllCheck" Click="OnToggleAllGaps" ToolTip="모두 체크 / 해제" />
-                                            <TextBlock x:Name="GapCountText" Grid.Column="1" Style="{StaticResource Caption}" Margin="8,0,0,0" />
+                                            <TextBlock x:Name="GapCountText" Grid.Column="1" Style="{StaticResource Caption}" Margin="8,0,0,0"
+                                                       ToolTip="맵에서 후보를 클릭해도 체크 / 해제됩니다 (후보 선택 도구 V)" />
                                         </Grid>
                                         <ListBox x:Name="GapList" MaxHeight="180" ItemTemplate="{StaticResource CheckItemTemplate}" SelectionChanged="OnGapSelected" />
+                                        <CheckBox x:Name="EncloseUnknownCheck" Style="{StaticResource Switch}" Content="막힌 내부는 Unknown으로" IsChecked="True" Margin="0,8,0,0"
+                                                  ToolTip="틈을 이어 벽이 완전히 닫히면 그 안(장애물 · 확률값 포함)을 Unknown(0)으로 바꿔&#x0a;AMR 연산 대상에서 뺍니다. 맵 가장자리에 닿거나 주행 공간 대부분을 차지하는 영역은 제외합니다.&#x0a;별도 작업으로 기록되어 Ctrl+Z로 이것만 되돌릴 수 있습니다." />
                                         <Button Style="{StaticResource PrimaryButton}" Margin="0,8,0,0" Click="OnFillGaps">
                                             <StackPanel Orientation="Horizontal">
                                                 <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Check}" />
@@ -938,7 +950,7 @@
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource CardTitle}" Text="확률값 정리" />
                                         <ContentControl Style="{StaticResource InfoTip}"
-                                                        ToolTip="기준값 이하는 Free, 장애물 기준값 이상은 장애물로 바꾸고 그 사이 값은 유지합니다.&#x0a;위치 인식이 확률값을 쓰는지 확인 전에는 필요한 영역만 선택해 적용하세요." />
+                                                        ToolTip="낮은 값 이하는 Free 또는 Unknown으로, 장애물 기준값 이상은 장애물로 바꾸고 그 사이 값은 유지합니다.&#x0a;위치 인식이 확률값을 쓰는지 확인 전에는 필요한 영역만 선택해 적용하세요." />
                                     </StackPanel>
                                     <Grid Margin="0,10,0,0">
                                         <Grid.ColumnDefinitions>
@@ -946,10 +958,18 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Free로 바꿀 값" Style="{StaticResource RowLabel}" />
+                                        <TextBlock Text="낮은 값" Style="{StaticResource RowLabel}" />
                                         <TextBox x:Name="FreeMaxBox" Grid.Column="1" Style="{StaticResource NumberBox}" Width="56" Text="50" />
-                                        <TextBlock Grid.Column="2" Text="이하" Style="{StaticResource Unit}" />
+                                        <TextBlock Grid.Column="2" Text="이하를" Style="{StaticResource Unit}" />
                                     </Grid>
+                                    <Border Style="{StaticResource SegmentTrack}" Margin="0,8,0,0">
+                                        <UniformGrid Rows="1">
+                                            <RadioButton x:Name="ProbToFree" Style="{StaticResource SegmentRadio}" GroupName="ProbTarget"
+                                                         Content="Free로" IsChecked="True" ToolTip="낮은 확률값을 Free(1)로 바꿉니다." />
+                                            <RadioButton x:Name="ProbToUnknown" Style="{StaticResource SegmentRadio}" GroupName="ProbTarget"
+                                                         Content="Unknown으로" ToolTip="낮은 확률값을 Unknown(0)으로 바꿔 AMR 연산 대상에서 뺍니다." />
+                                        </UniformGrid>
+                                    </Border>
                                     <Button Margin="0,10,0,0" Click="OnCleanProbability">
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Sparkle}" />

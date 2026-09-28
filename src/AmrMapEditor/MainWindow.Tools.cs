@@ -28,6 +28,7 @@ public partial class MainWindow
         EditTool.BlobPick => ToolBlobPick,
         EditTool.Wall => ToolWall,
         EditTool.Pillar => ToolPillar,
+        EditTool.CandidatePick => ToolPick,
         _ => ToolRestore,
     };
 
@@ -60,6 +61,7 @@ public partial class MainWindow
         EditTool.BlobPick => "객체 삭제: 클릭한 장애물 덩어리 전체를 Free로",
         EditTool.Wall => "벽 직선화: 벽 하나를 감싸듯 드래그 (정리 탭 › 벽 · 기둥 옵션에서 두께·스냅 설정)",
         EditTool.Pillar => "기둥 정리: 기둥을 클릭하면 사각형으로 정리",
+        EditTool.CandidatePick => "후보 선택: 맵에서 후보를 클릭해 체크 / 해제",
         _ => "복원 브러시: 칠한 부분을 기준 맵 값으로 되돌림",
     };
 
@@ -148,6 +150,10 @@ public partial class MainWindow
 
             case EditTool.Pillar:
                 RectifyPillarAt(x, y);
+                break;
+
+            case EditTool.CandidatePick:
+                ToggleCandidateAt(x, y);
                 break;
         }
     }

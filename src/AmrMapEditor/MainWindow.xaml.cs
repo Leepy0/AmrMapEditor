@@ -16,7 +16,7 @@ using Microsoft.Win32;
 
 namespace AmrMapEditor;
 
-public enum EditTool { Brush, Eraser, Line, Rect, Fill, Picker, Select, Polygon, BlobPick, Restore, Wall, Pillar }
+public enum EditTool { Brush, Eraser, Line, Rect, Fill, Picker, Select, Polygon, BlobPick, Restore, Wall, Pillar, CandidatePick }
 
 public partial class MainWindow : Window
 {
@@ -135,6 +135,8 @@ public partial class MainWindow : Window
 
     private void OnSaveAs(object sender, RoutedEventArgs e) => SaveAs();
 
+    private void OnCloseMap(object sender, RoutedEventArgs e) => CloseMap();
+
     private void OnDropFile(object sender, DragEventArgs e)
     {
         if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
@@ -223,6 +225,51 @@ public partial class MainWindow : Window
         string warn = st.Invalid > 0 ? $"  ⚠ 범위 외 값(255) {st.Invalid:N0} px" : "";
         string prot = _protect.Count > 0 ? $"  · 보호 영역 {_protect.Count}개" : "";
         SetStatus($"열기 완료: {Path.GetFileName(path)}{prot}{warn}");
+    }
+
+    /// <summary>현재 맵 닫기 (저장 안 된 변경이 있으면 확인). 기준 맵 · 도면 · 후보도 함께 정리</summary>
+    private void CloseMap()
+    {
+        if (_map == null) return;
+        CancelDrag();
+        CancelPolygon();
+        if (!ConfirmDiscard()) return;
+
+        CancelAlign(true);
+        CloseReference();
+        CloseDxf();
+
+        string? name = _path != null ? Path.GetFileName(_path) : null;
+        _map = null;
+        _original = null;
+        _path = null;
+        _metaChanged = false;
+        _tracker = null;
+        _undo.Clear();
+        _opLog.Clear();
+
+        _selection = null;
+        ResetCandidates();
+        _diffRegions.Clear();
+        _updateAreas.Clear();
+        _updateMask = null;
+        _focusMarker = null;
+        _axis = null;
+        _protect.Clear();
+        UpdateAxisText();
+
+        MapViewer.ClearImage();
+        ApplyProtect();
+        SetDirty(false);
+        UpdateInfo();
+        UpdateSelectionUi();
+        UpdateAreasChanged();
+        RefreshMarkers();
+        UpdateUndoButtons();
+        UpdateDiffStats();
+        UpdateZoomStatus();
+        UpdateCursorStatus(-1, -1);
+        SetStatus(name != null ? $"닫음: {name}" : "맵을 닫았습니다.");
     }
 
     /// <summary>변경 내용이 있으면 저장 여부 확인. 계속 진행해도 되면 true</summary>
@@ -589,6 +636,10 @@ public partial class MainWindow : Window
                     SetSelection(null);
                     e.Handled = true;
                     break;
+                case Key.W:
+                    CloseMap();
+                    e.Handled = true;
+                    break;
             }
             return;
         }
@@ -613,6 +664,7 @@ public partial class MainWindow : Window
             case Key.H: SelectTool(EditTool.Restore); e.Handled = true; break;
             case Key.W: SelectTool(EditTool.Wall); e.Handled = true; break;
             case Key.C: SelectTool(EditTool.Pillar); e.Handled = true; break;
+            case Key.V: SelectTool(EditTool.CandidatePick); e.Handled = true; break;
             case Key.F: MapViewer.FitToView(); e.Handled = true; break;
             case Key.Enter when _polyPoints.Count > 0:
                 FinishPolygon();
@@ -691,6 +743,7 @@ public partial class MainWindow : Window
         InspectorBody.IsEnabled = open;
         SaveButton.IsEnabled = open;
         SaveAsButton.IsEnabled = open;
+        CloseMapButton.IsEnabled = open;
 
         if (_map == null)
         {

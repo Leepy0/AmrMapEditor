@@ -24,6 +24,9 @@ public sealed class StraightenResult
     public int Thickness { get; init; }
     public int PointCount { get; init; }
     public bool Snapped { get; init; }
+
+    /// <summary>다시 그린 직선 구간 수 (꺾인 벽이면 2 이상)</summary>
+    public int SegmentCount { get; init; } = 1;
 }
 
 public sealed class RectifyResult
@@ -61,8 +64,16 @@ public static class WallCleanup
             xs[j] = pts[k] % w + 0.5;
             ys[j] = pts[k] / w + 0.5;
         }
+        return DominantAngle(xs, ys, m, map.Width + map.Height);
+    }
 
-        int off = map.Width + map.Height + 2;
+    /// <summary>
+    /// 점들이 가장 날카롭게 모이는 직교 방향 쌍의 각도 [-45°, 45°).
+    /// extent는 좌표 최댓값 합(히스토그램 크기)
+    /// </summary>
+    private static double DominantAngle(IReadOnlyList<double> xs, IReadOnlyList<double> ys, int m, int extent)
+    {
+        int off = extent + 2;
         var hu = new int[2 * off + 2];
         var hv = new int[2 * off + 2];
 
@@ -157,6 +168,10 @@ public static class WallCleanup
         int n = xs.Count;
         if (n < 5) return null;
 
+        // 꺾인 벽: 직선 하나로 피팅하면 대각선이 되어 모서리가 사라지므로 직교 구간별로 다시 그림
+        StraightenResult? multi = StraightenSegments(region, scan, xs, ys, thr, thickness, axisDeg, snapTolDeg, t);
+        if (multi != null) return multi;
+
         // PCA
         double mx = 0, my = 0;
         for (int k = 0; k < n; k++) { mx += xs[k]; my += ys[k]; }
@@ -235,6 +250,170 @@ public static class WallCleanup
         }
 
         return new StraightenResult { AngleDeg = phi, LengthPx = length, Thickness = thickness, PointCount = n, Snapped = snapped };
+    }
+
+    private sealed class WallSegment
+    {
+        public double Dx, Dy, Nx, Ny;   // 방향, 법선
+        public double Cn;               // 중심선 위치 (법선 좌표)
+        public double TMin, TMax;       // 방향 좌표 범위
+        public int Thickness;
+        public int Count;
+    }
+
+    /// <summary>
+    /// 직교하는 두 방향으로 벽 구간을 차례로 찾아 2개 이상이면 구간별로 다시 그리고,
+    /// 서로 만나는 끝은 상대 벽 바깥면까지 늘려 각진 모서리를 유지. 구간이 1개면 null
+    /// </summary>
+    private static StraightenResult? StraightenSegments(PixelRegion region, IntRect scan, List<double> xs, List<double> ys,
+                                                       byte thr, int thickness, double? axisDeg, double snapTolDeg, EditTracker t)
+    {
+        int n = xs.Count;
+        if (n < 20) return null;
+
+        double theta = DominantAngle(xs, ys, n, t.Map.Width + t.Map.Height);
+        bool snapped = false;
+        if (axisDeg is double ax && Math.Abs(NormalizeAxis(theta - ax)) <= snapTolDeg)
+        {
+            theta = NormalizeAxis(ax);
+            snapped = true;
+        }
+
+        int window = thickness > 0 ? thickness + 2 : 5;
+        var used = new bool[n];
+        var segments = new List<WallSegment>();
+        for (int iter = 0; iter < 4; iter++)
+        {
+            WallSegment? best = null;
+            foreach (double deg in new[] { theta, theta + 90 })
+            {
+                WallSegment? seg = FindBand(xs, ys, used, deg, window);
+                if (seg != null && (best == null || seg.Count > best.Count)) best = seg;
+            }
+            // 톱니·잡음 같은 짧은 조각은 구간으로 보지 않음
+            if (best == null || best.Count < Math.Max(8, n * 0.12) || best.TMax - best.TMin + 1 < 3 * window) break;
+
+            for (int k = 0; k < n; k++)
+            {
+                double ss = xs[k] * best.Nx + ys[k] * best.Ny;
+                if (Math.Abs(ss - best.Cn) <= window / 2.0 + 0.5) used[k] = true;
+            }
+            segments.Add(best);
+        }
+        if (segments.Count < 2) return null;
+
+        // 구간별 두께와 중심선 (축 정렬 시 정확히 두께만큼 칠해지도록 보정)
+        foreach (WallSegment seg in segments)
+        {
+            double length = seg.TMax - seg.TMin + 1;
+            int th = thickness;
+            if (th <= 0)
+            {
+                int inBand = 0;
+                for (int k = 0; k < n; k++)
+                {
+                    double ss = xs[k] * seg.Nx + ys[k] * seg.Ny, tt = xs[k] * seg.Dx + ys[k] * seg.Dy;
+                    if (Math.Abs(ss - seg.Cn) <= 4 && tt >= seg.TMin && tt <= seg.TMax) inBand++;
+                }
+                th = Math.Clamp((int)Math.Round(inBand / length), 1, 15);
+            }
+            seg.Thickness = th;
+            seg.Cn = th % 2 == 1 ? Math.Floor(seg.Cn) + 0.5 : Math.Round(seg.Cn);
+        }
+
+        // 만나는 끝을 상대 벽 바깥면까지 연장 (ㄱ자 모서리가 비지 않도록)
+        foreach (WallSegment a in segments)
+        foreach (WallSegment b in segments)
+        {
+            if (ReferenceEquals(a, b) || Math.Abs(a.Dx * b.Dx + a.Dy * b.Dy) > 0.5) continue;
+            // 두 중심선 교점: p = cnA·nA + cnB·nB (서로 직교)
+            double px = a.Cn * a.Nx + b.Cn * b.Nx, py = a.Cn * a.Ny + b.Cn * b.Ny;
+            double ta = px * a.Dx + py * a.Dy, tb = px * b.Dx + py * b.Dy;
+            double tol = Math.Max(a.Thickness, b.Thickness) + 4;
+            if (tb < b.TMin - tol || tb > b.TMax + tol) continue;   // 교점이 상대 벽 범위 밖
+            if (ta < a.TMin - tol || ta > a.TMax + tol) continue;
+            double halfB = b.Thickness / 2.0;
+            if (ta >= a.TMax - tol) a.TMax = Math.Max(a.TMax, ta + halfB);
+            if (ta <= a.TMin + tol) a.TMin = Math.Min(a.TMin, ta - halfB);
+        }
+
+        MapImage map = t.Map;
+        for (int y = scan.Y; y < scan.Bottom; y++)
+        for (int x = scan.X; x < scan.Right; x++)
+        {
+            if (!region.Contains(x, y) || map.Get(x, y) < 2) continue;
+            double px = x + 0.5, py = y + 0.5;
+            foreach (WallSegment seg in segments)
+            {
+                double ss = px * seg.Nx + py * seg.Ny - seg.Cn, tt = px * seg.Dx + py * seg.Dy;
+                if (Math.Abs(ss) <= seg.Thickness / 2.0 + 2 && tt >= seg.TMin - 2 && tt <= seg.TMax + 2)
+                {
+                    t.Set(x, y, MapValues.Free);
+                    break;
+                }
+            }
+        }
+
+        double total = 0;
+        foreach (WallSegment seg in segments)
+        {
+            double half = (seg.Thickness - 1) / 2.0 + 1e-6;
+            total += seg.TMax - seg.TMin + 1;
+            IntRect box = LineBox(seg.TMin, seg.TMax, seg.Cn, half, seg.Dx, seg.Dy, seg.Nx, seg.Ny).Intersect(map.Bounds);
+            for (int y = box.Y; y < box.Bottom; y++)
+            for (int x = box.X; x < box.Right; x++)
+            {
+                double px = x + 0.5, py = y + 0.5;
+                double ss = px * seg.Nx + py * seg.Ny - seg.Cn, tt = px * seg.Dx + py * seg.Dy;
+                if (Math.Abs(ss) <= half && tt >= seg.TMin - 1e-6 && tt <= seg.TMax + 1e-6) t.Set(x, y, MapValues.Obstacle);
+            }
+        }
+
+        return new StraightenResult
+        {
+            AngleDeg = theta, LengthPx = total, Thickness = segments[0].Thickness, PointCount = n,
+            Snapped = snapped, SegmentCount = segments.Count,
+        };
+    }
+
+    /// <summary>deg 방향으로 남은 점이 가장 많이 모인 띠(폭 window) 찾기</summary>
+    private static WallSegment? FindBand(List<double> xs, List<double> ys, bool[] used, double deg, int window)
+    {
+        double r = deg * Math.PI / 180, dx = Math.Cos(r), dy = Math.Sin(r), nx = -dy, ny = dx;
+        var hist = new Dictionary<int, int>();
+        for (int k = 0; k < xs.Count; k++)
+        {
+            if (used[k]) continue;
+            int b = (int)Math.Floor(xs[k] * nx + ys[k] * ny);
+            hist[b] = hist.TryGetValue(b, out int c) ? c + 1 : 1;
+        }
+        if (hist.Count == 0) return null;
+
+        int bestStart = 0, bestCount = -1;
+        foreach (int start in hist.Keys)
+        {
+            // start 칸이 띠의 가운데가 되도록 모든 위치 시험
+            int from = start - window / 2, sum = 0;
+            for (int b = from; b < from + window; b++) sum += hist.TryGetValue(b, out int c) ? c : 0;
+            if (sum > bestCount) { bestCount = sum; bestStart = from; }
+        }
+
+        double sSum = 0, tMin = double.MaxValue, tMax = double.MinValue;
+        int count = 0;
+        for (int k = 0; k < xs.Count; k++)
+        {
+            if (used[k]) continue;
+            double ss = xs[k] * nx + ys[k] * ny;
+            int b = (int)Math.Floor(ss);
+            if (b < bestStart || b >= bestStart + window) continue;
+            double tt = xs[k] * dx + ys[k] * dy;
+            sSum += ss;
+            count++;
+            if (tt < tMin) tMin = tt;
+            if (tt > tMax) tMax = tt;
+        }
+        if (count == 0) return null;
+        return new WallSegment { Dx = dx, Dy = dy, Nx = nx, Ny = ny, Cn = sSum / count, TMin = tMin, TMax = tMax, Count = count };
     }
 
     /// <summary>직선(방향 무관, 180° 주기) 각도 차이 (-90, 90]</summary>
@@ -415,22 +594,124 @@ public static class WallCleanup
 
     // ───────────── 확률값 / 외곽 ─────────────
 
-    /// <summary>확률값(2~253) 정리: occThr 이상 → 장애물, freeMax 이하 → Free, 그 사이는 유지</summary>
-    public static (int ToObstacle, int ToFree) CleanProbability(PixelRegion? region, byte occThr, byte freeMax, EditTracker t)
+    /// <summary>
+    /// 확률값(2~253) 정리: occThr 이상 → 장애물, lowMax 이하 → lowTarget(Free 또는 Unknown), 그 사이는 유지
+    /// </summary>
+    public static (int ToObstacle, int ToLow) CleanProbability(PixelRegion? region, byte occThr, byte lowMax, byte lowTarget,
+                                                               EditTracker t)
     {
         MapImage map = t.Map;
-        int toObs = 0, toFree = 0;
+        int toObs = 0, toLow = 0;
         void Apply(int x, int y)
         {
             byte v = map.Get(x, y);
             if (!MapValues.IsProbability(v)) return;
             if (v >= occThr) { if (t.Set(x, y, MapValues.Obstacle)) toObs++; }
-            else if (v <= freeMax) { if (t.Set(x, y, MapValues.Free)) toFree++; }
+            else if (v <= lowMax) { if (t.Set(x, y, lowTarget)) toLow++; }
         }
 
         if (region != null) region.ForEach(Apply);
         else PixelRegion.FromRect(map.Bounds).ForEach(Apply);
-        return (toObs, toFree);
+        return (toObs, toLow);
+    }
+
+    // ───────────── 닫힌 내부 ─────────────
+
+    /// <summary>
+    /// seeds(방금 이은 벽 픽셀) 옆에서 벽으로 완전히 둘러싸인 내부 영역을 찾음.
+    /// 내부 = 맵 가장자리에 닿지 않는 비장애물 영역(4방향 연결) + 그 안에 갇힌 장애물·확률값.
+    /// 맵 전체 Free의 maxFreeShare 이상을 차지하는 영역은 AMR 주행 공간(건물 내부)으로 보고 제외
+    /// </summary>
+    public static List<int[]> FindEnclosedInteriors(MapImage map, byte thr, IEnumerable<int> seeds, double maxFreeShare = 0.3)
+    {
+        int w = map.Width, h = map.Height;
+        byte[] data = map.Data;
+        var visited = new bool[data.Length];
+        var result = new List<int[]>();
+        long totalFree = 0;
+        foreach (byte v in data) if (v == MapValues.Free) totalFree++;
+
+        var stack = new Stack<int>();
+        var region = new List<int>();
+        foreach (int seed in seeds)
+        {
+            int sx = seed % w, sy = seed / w;
+            foreach ((int nx, int ny) in new[] { (sx - 1, sy), (sx + 1, sy), (sx, sy - 1), (sx, sy + 1) })
+            {
+                if ((uint)nx >= (uint)w || (uint)ny >= (uint)h) continue;
+                int start = ny * w + nx;
+                if (visited[start] || data[start] >= thr) continue;
+
+                // 비장애물 영역 채우기 (4방향: 8방향으로 이어진 대각선 벽도 막힘)
+                region.Clear();
+                bool border = false;
+                long free = 0;
+                int minX = nx, maxX = nx, minY = ny, maxY = ny;
+                visited[start] = true;
+                stack.Push(start);
+                while (stack.Count > 0)
+                {
+                    int i = stack.Pop();
+                    region.Add(i);
+                    int x = i % w, y = i / w;
+                    if (data[i] == MapValues.Free) free++;
+                    if (x == 0 || y == 0 || x == w - 1 || y == h - 1) border = true;
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                    if (x > 0) Visit(i - 1);
+                    if (x < w - 1) Visit(i + 1);
+                    if (y > 0) Visit(i - w);
+                    if (y < h - 1) Visit(i + w);
+                }
+                if (border || (totalFree > 0 && free > totalFree * maxFreeShare)) continue;
+
+                result.Add(WithHoles(region, minX, minY, maxX, maxY));
+            }
+        }
+        return result;
+
+        void Visit(int j)
+        {
+            if (visited[j] || data[j] >= thr) return;
+            visited[j] = true;
+            stack.Push(j);
+        }
+
+        // 영역 안에 섬처럼 갇힌 장애물도 내부에 포함: 영역 경계 상자 바깥에서 8방향으로 닿지 않는 곳
+        int[] WithHoles(List<int> inside, int x0, int y0, int x1, int y1)
+        {
+            x0--; y0--; x1++; y1++;   // 가장자리에 닿지 않으므로 맵 안
+            int bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+            var inR = new bool[bw * bh];
+            foreach (int i in inside) inR[(i / w - y0) * bw + i % w - x0] = true;
+            var outside = new bool[bw * bh];
+            var q = new Stack<int>();
+            for (int x = 0; x < bw; x++) { Seed(x); Seed((bh - 1) * bw + x); }
+            for (int y = 0; y < bh; y++) { Seed(y * bw); Seed(y * bw + bw - 1); }
+            while (q.Count > 0)
+            {
+                int k = q.Pop(), kx = k % bw, ky = k / bw;
+                for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int ax = kx + dx, ay = ky + dy;
+                    if ((uint)ax < (uint)bw && (uint)ay < (uint)bh) Seed(ay * bw + ax);
+                }
+            }
+            var all = new List<int>(inside);
+            for (int k = 0; k < inR.Length; k++)
+                if (!inR[k] && !outside[k]) all.Add((y0 + k / bw) * w + x0 + k % bw);
+            return all.ToArray();
+
+            void Seed(int k)
+            {
+                if (inR[k] || outside[k]) return;
+                outside[k] = true;
+                q.Push(k);
+            }
+        }
     }
 
     /// <summary>inside 영역 바깥을 모두 Unknown으로 (외벽 너머 산란점 정리)</summary>

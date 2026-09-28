@@ -46,6 +46,66 @@ public partial class MainWindow
         return item;
     }
 
+    /// <summary>
+    /// 후보 목록은 한 종류만 표시 (노이즈 · 벽 끊김 · 이중 벽은 서로 배타).
+    /// 새로 찾기 전에 다른 후보를 모두 지움
+    /// </summary>
+    private void ResetCandidates()
+    {
+        _bulk = true;
+        _candidates.Clear();
+        _gapCandidates.Clear();
+        _dupCandidates.Clear();
+        _bulk = false;
+        _dupDetected = false;
+        _focusMarker = null;
+        RefreshMarkers();
+        RefreshUpdateGuide();
+    }
+
+    /// <summary>후보를 찾은 뒤: 결과가 있으면 맵에서 바로 클릭해 체크할 수 있도록 후보 선택 도구로 전환</summary>
+    private void AfterDetect(int count)
+    {
+        if (count > 0 && _tool != EditTool.CandidatePick) SelectTool(EditTool.CandidatePick);
+    }
+
+    /// <summary>후보 선택 도구: 클릭 위치의 후보(여럿이면 가장 작은 것) 체크 토글</summary>
+    private void ToggleCandidateAt(int x, int y)
+    {
+        (ListBox List, ObservableCollection<BlobItem> Items)[] sets =
+        {
+            (CandidateList, _candidates), (GapList, _gapCandidates), (DupList, _dupCandidates),
+        };
+        double tol = Math.Max(1, 4 / MapViewer.Zoom);   // 작은 후보도 누르기 쉽게 화면 4px 여유
+        BlobItem? hit = null;
+        ListBox? hitList = null;
+        long bestArea = long.MaxValue;
+        int total = 0;
+        foreach ((ListBox list, ObservableCollection<BlobItem> items) in sets)
+        foreach (BlobItem c in items)
+        {
+            total++;
+            IntRect b = c.Blob.Bounds;
+            if (x < b.X - tol || x >= b.Right + tol || y < b.Y - tol || y >= b.Bottom + tol) continue;
+            long area = (long)b.Width * b.Height;
+            if (area < bestArea)
+            {
+                bestArea = area;
+                hit = c;
+                hitList = list;
+            }
+        }
+
+        if (hit == null)
+        {
+            SetStatus(total == 0 ? "표시된 후보가 없습니다. 정리 탭에서 후보 찾기를 먼저 실행하세요." : "후보 상자를 클릭하면 체크 / 해제됩니다.");
+            return;
+        }
+        hit.IsChecked = !hit.IsChecked;   // PropertyChanged → 마커 · 개수 갱신
+        hitList!.ScrollIntoView(hit);
+        SetStatus($"후보 {hit.Title} {(hit.IsChecked ? "체크" : "체크 해제")} · {hit.Detail}");
+    }
+
     /// <summary>모두 체크돼 있으면 모두 해제, 아니면 모두 체크</summary>
     private void ToggleAll(ICollection<BlobItem> items) => SetAllChecked(items, !items.All(i => i.IsChecked));
 
@@ -120,14 +180,14 @@ public partial class MainWindow
             blobs = BlobDetector.Detect(_map, _occThreshold, maxArea, maxSide, region);
         int excluded = blobs.RemoveAll(TouchesProtect);
 
+        ResetCandidates();
         _bulk = true;
-        _candidates.Clear();
         int index = 1;
         foreach (Blob b in blobs)
             _candidates.Add(Track(BlobItem.Noise(index++, b, _occThreshold, _meta.Resolution)));
         _bulk = false;
-        _focusMarker = null;
         RefreshMarkers();
+        AfterDetect(blobs.Count);
         SetStatus($"노이즈 후보 {blobs.Count:N0}개 · {ScopeName()} ({sw.ElapsedMilliseconds} ms)" + (excluded > 0 ? $" · 보호 영역 {excluded}개 제외" : ""));
     }
 
@@ -244,7 +304,8 @@ public partial class MainWindow
             SetStatus("영역 안에 장애물 픽셀이 부족합니다.");
             return;
         }
-        SetStatus($"벽 직선화: 각도 {r.AngleDeg:0.00}°{(r.Snapped ? " (주축 스냅)" : "")}, 두께 {r.Thickness} px, " +
+        SetStatus($"벽 직선화{(r.SegmentCount > 1 ? $" (꺾인 벽 {r.SegmentCount}구간)" : "")}: " +
+                  $"각도 {r.AngleDeg:0.00}°{(r.Snapped ? " (주축 스냅)" : "")}, 두께 {r.Thickness} px, " +
                   $"길이 {r.LengthPx * _meta.Resolution:0.00} m" + BlockedNote());
     }
 
@@ -285,14 +346,14 @@ public partial class MainWindow
             gaps = WallCleanup.FindGaps(_map, _occThreshold, maxGap, minRun, region);
         int excluded = gaps.RemoveAll(TouchesProtect);
 
+        ResetCandidates();
         _bulk = true;
-        _gapCandidates.Clear();
         int index = 1;
         foreach (Blob b in gaps)
             _gapCandidates.Add(Track(BlobItem.Gap(index++, b, _meta.Resolution)));
         _bulk = false;
-        _focusMarker = null;
         RefreshMarkers();
+        AfterDetect(gaps.Count);
 
         string tilt = _axis is double a && Math.Abs(a) > 0.5 ? $" · 맵이 {a:0.0}° 기울어져 있어 검출이 적을 수 있음" : "";
         SetStatus($"벽 끊김 후보 {gaps.Count:N0}개 · {ScopeName()} (확인 후 체크)" +
@@ -316,13 +377,32 @@ public partial class MainWindow
             return;
         }
 
+        var filled = new List<int>();
         BeginEdit($"벽 끊김 연결 {targets.Count}개");
         foreach (BlobItem t in targets)
             if (t.Blob.Pixels != null)
-                foreach (int i in t.Blob.Pixels) _tracker.SetIndex(i, MapValues.Obstacle);
+                foreach (int i in t.Blob.Pixels)
+                    if (_tracker.SetIndex(i, MapValues.Obstacle) || _map.Data[i] >= _occThreshold) filled.Add(i);
         int n = CommitEdit();
+        string blocked = BlockedNote();
         RemoveItems(_gapCandidates, targets);
-        SetStatus($"벽 끊김 {targets.Count:N0}개 연결 ({n:N0} px)" + BlockedNote());
+
+        // 이어서 완전히 닫힌 내부는 Unknown으로 (장애물 · 확률값이 AMR 연산 대상이 되지 않도록). 별도 실행 취소 단위
+        string inner = "";
+        if (EncloseUnknownCheck.IsChecked == true && filled.Count > 0)
+        {
+            List<int[]> rooms;
+            using (new WaitCursor()) rooms = WallCleanup.FindEnclosedInteriors(_map, _occThreshold, filled);
+            if (rooms.Count > 0)
+            {
+                BeginEdit($"닫힌 내부 Unknown {rooms.Count}곳", useClip: false);
+                foreach (int[] room in rooms)
+                    foreach (int i in room) _tracker.SetIndex(i, MapValues.Unknown);
+                int m = CommitEdit();
+                if (m > 0) inner = $" · 닫힌 내부 {rooms.Count}곳 → Unknown ({m:N0} px, Ctrl+Z로 이것만 되돌림)";
+            }
+        }
+        SetStatus($"벽 끊김 {targets.Count:N0}개 연결 ({n:N0} px)" + inner + blocked);
     }
 
     // ───────────── 확률값 / 외곽 ─────────────
@@ -330,24 +410,27 @@ public partial class MainWindow
     private void OnCleanProbability(object sender, RoutedEventArgs e)
     {
         if (_map == null || _tracker == null) return;
-        if (!ReadInt(FreeMaxBox, 1, 253, "Free 기준", out int freeMax)) return;
+        if (!ReadInt(FreeMaxBox, 1, 253, "낮은 값 기준", out int freeMax)) return;
         if (freeMax >= _occThreshold)
         {
-            SetStatus($"Free 기준({freeMax})은 장애물 기준값({_occThreshold})보다 작아야 합니다.");
+            SetStatus($"낮은 값 기준({freeMax})은 장애물 기준값({_occThreshold})보다 작아야 합니다.");
             return;
         }
+        bool toUnknown = ProbToUnknown.IsChecked == true;
+        byte lowTarget = toUnknown ? MapValues.Unknown : MapValues.Free;
+        string lowName = toUnknown ? "Unknown" : "Free";
         if (_selection == null &&
-            !Confirm($"선택 영역이 없어 맵 전체에 적용합니다.\n{freeMax} 이하 → Free, {_occThreshold} 이상 → 장애물\n계속할까요?", "확률값 정리"))
+            !Confirm($"선택 영역이 없어 맵 전체에 적용합니다.\n{freeMax} 이하 → {lowName}, {_occThreshold} 이상 → 장애물\n계속할까요?", "확률값 정리"))
             return;
 
-        (int toObs, int toFree) r;
-        BeginEdit("확률값 정리", useClip: false);
+        (int toObs, int toLow) r;
+        BeginEdit($"확률값 정리 ({lowName})", useClip: false);
         using (new WaitCursor())
         {
-            r = WallCleanup.CleanProbability(_selection, _occThreshold, (byte)freeMax, _tracker);
+            r = WallCleanup.CleanProbability(_selection, _occThreshold, (byte)freeMax, lowTarget, _tracker);
             CommitEdit();
         }
-        SetStatus($"확률값 정리: 장애물 {r.toObs:N0} px, Free {r.toFree:N0} px" + BlockedNote());
+        SetStatus($"확률값 정리 · {ScopeName()}: 장애물 {r.toObs:N0} px, {lowName} {r.toLow:N0} px" + BlockedNote());
     }
 
     private void OnClearOutside(object sender, RoutedEventArgs e)

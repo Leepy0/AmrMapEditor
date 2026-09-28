@@ -198,6 +198,22 @@ public sealed class MapView : FrameworkElement
         _preview = null;
     }
 
+    /// <summary>맵 닫기: 비트맵과 표시 요소를 모두 비움</summary>
+    public void ClearImage()
+    {
+        _base = null;
+        _overlay = null;
+        ImageWidth = 0;
+        ImageHeight = 0;
+        _markers = Array.Empty<MapMarker>();
+        _regions = Array.Empty<RegionOverlay>();
+        _selection = null;
+        _preview = null;
+        _dxf = null;
+        RenderContent();
+        RenderCursor();
+    }
+
     /// <summary>region 영역을 fill 콜백으로 채워 기본 레이어에 반영</summary>
     public void UpdateBase(IntRect region, Action<IntRect, uint[]> fill)
     {

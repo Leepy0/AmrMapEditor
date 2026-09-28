@@ -323,16 +323,16 @@ public partial class MainWindow
             blobs = UpdateCorrection.FindDuplicateWalls(_map, _reference, _occThreshold, _updateMask, dist, minArea);
         int excluded = blobs.RemoveAll(TouchesProtect);
 
+        ResetCandidates();
         _bulk = true;
-        _dupCandidates.Clear();
         int index = 1;
         foreach (Blob b in blobs.OrderByDescending(x => x.Area))
             _dupCandidates.Add(Track(BlobItem.Duplicate(index++, b, _meta.Resolution)));
         _bulk = false;
         _dupDetected = true;
-        _focusMarker = null;
         RefreshMarkers();
         RefreshUpdateGuide();
+        AfterDetect(blobs.Count);
         SetStatus($"이중 벽 후보 {blobs.Count:N0}개" + (excluded > 0 ? $" (보호 영역 {excluded}개 제외)" : ""));
     }
 
