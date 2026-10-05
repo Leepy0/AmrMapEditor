@@ -3,7 +3,7 @@ using AmrMapEditor.Core;
 
 namespace AmrMapEditor.Models;
 
-/// <summary>체크 가능한 덩어리 후보 (노이즈 / 이중 벽 / 벽 끊김)</summary>
+/// <summary>체크 가능한 덩어리 후보 (노이즈 / 이중 벽 / 벽 끊김 / 고립 구역)</summary>
 public sealed class BlobItem : INotifyPropertyChanged
 {
     private bool _isChecked;
@@ -46,6 +46,10 @@ public sealed class BlobItem : INotifyPropertyChanged
 
     public static BlobItem Gap(int index, Blob b, double res) =>
         new(b, $"{index}", $"틈 {b.MaxSide * res:0.##} m · ({b.Bounds.X}, {b.Bounds.Y})", false);
+
+    /// <summary>고립 구역. 큰 구역(실제 주행 구역일 수 있음)은 체크 해제 상태로</summary>
+    public static BlobItem Isolated(int index, Blob b, double res, bool large) =>
+        new(b, $"{index}", $"{b.Area:N0} px · {b.Area * res * res:0.##} m²" + (large ? " · 큰 구역, 확인 필요" : ""), !large);
 }
 
 /// <summary>기준 맵 대비 변경 영역 목록 항목</summary>

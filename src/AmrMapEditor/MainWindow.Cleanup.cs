@@ -11,7 +11,7 @@ using AmrMapEditor.Models;
 
 namespace AmrMapEditor;
 
-/// <summary>맵 정리: 노이즈, 벽 직선화, 기둥, 벽 끊김, 확률값, 외곽, 기울기 보정</summary>
+/// <summary>맵 정리: 노이즈, 벽 직선화, 기둥, 벽 끊김, 고립 구역, 확률값, 외곽, 기울기 보정</summary>
 public partial class MainWindow
 {
     private const int BlobPickWarnArea = 500;      // 객체 삭제 시 확인 (벽 오삭제 방지)
@@ -47,7 +47,7 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// 후보 목록은 한 종류만 표시 (노이즈 · 벽 끊김 · 이중 벽은 서로 배타).
+    /// 후보 목록은 한 종류만 표시 (노이즈 · 벽 끊김 · 이중 벽 · 고립 구역은 서로 배타).
     /// 새로 찾기 전에 다른 후보를 모두 지움
     /// </summary>
     private void ResetCandidates()
@@ -56,6 +56,7 @@ public partial class MainWindow
         _candidates.Clear();
         _gapCandidates.Clear();
         _dupCandidates.Clear();
+        _isoCandidates.Clear();
         _bulk = false;
         _dupDetected = false;
         _focusMarker = null;
@@ -74,7 +75,7 @@ public partial class MainWindow
     {
         (ListBox List, ObservableCollection<BlobItem> Items)[] sets =
         {
-            (CandidateList, _candidates), (GapList, _gapCandidates), (DupList, _dupCandidates),
+            (CandidateList, _candidates), (GapList, _gapCandidates), (DupList, _dupCandidates), (IsoList, _isoCandidates),
         };
         double tol = Math.Max(1, 4 / MapViewer.Zoom);   // 작은 후보도 누르기 쉽게 화면 4px 여유
         BlobItem? hit = null;
@@ -136,10 +137,11 @@ public partial class MainWindow
 
     private void RefreshMarkers()
     {
-        var list = new List<MapMarker>(_candidates.Count + _dupCandidates.Count + _gapCandidates.Count + 8);
+        var list = new List<MapMarker>(_candidates.Count + _dupCandidates.Count + _gapCandidates.Count + _isoCandidates.Count + 8);
         AddMarkers(list, _candidates, MarkerKind.Candidate, NoiseResults, NoiseAllCheck, CandidateCountText);
         AddMarkers(list, _dupCandidates, MarkerKind.Duplicate, DupResults, DupAllCheck, DupCountText);
         AddMarkers(list, _gapCandidates, MarkerKind.Gap, GapResults, GapAllCheck, GapCountText);
+        AddMarkers(list, _isoCandidates, MarkerKind.Isolated, IsoResults, IsoAllCheck, IsoCountText);
         foreach (PointD m in _alignMarks)
             list.Add(new MapMarker(new IntRect((int)Math.Floor(m.X) - 2, (int)Math.Floor(m.Y) - 2, 5, 5), MarkerKind.Focus));
         if (_focusMarker is MapMarker f) list.Add(f);
@@ -304,19 +306,23 @@ public partial class MainWindow
             SetStatus("영역 안에 장애물 픽셀이 부족합니다.");
             return;
         }
+
+        // 수평 · 수직이 아닌 직선은 픽셀 격자에서 계단 모양이 될 수밖에 없음 → 기울기 보정 안내
+        bool tilted = results.Exists(x => Math.Abs(WallCleanup.NormalizeAxis(x.AngleDeg)) > 0.05);
+        string tiltNote = tilted ? " · 기울어진 직선은 1px 계단으로 그려짐 (신규 맵은 기울기 보정 후 직선화하면 반듯함)" : "";
         if (results.Count == 1)
         {
             StraightenResult r = results[0];
             SetStatus($"벽 직선화{(r.SegmentCount > 1 ? $" (꺾인 벽 {r.SegmentCount}구간)" : "")}: " +
                       $"각도 {r.AngleDeg:0.00}°{(r.Snapped ? " (주축 스냅)" : "")}, 두께 {r.Thickness} px, " +
-                      $"길이 {r.LengthPx * _meta.Resolution:0.00} m" + BlockedNote());
+                      $"길이 {r.LengthPx * _meta.Resolution:0.00} m" + tiltNote + BlockedNote());
             return;
         }
         int snapped = results.Count(x => x.Snapped);
         double totalLen = 0;
         foreach (StraightenResult x in results) totalLen += x.LengthPx;
         SetStatus($"벽 직선화: {results.Count}개 벽 인식{(snapped > 0 ? $" (스냅 {snapped}개)" : "")}, " +
-                  $"총 길이 {totalLen * _meta.Resolution:0.00} m" + BlockedNote());
+                  $"총 길이 {totalLen * _meta.Resolution:0.00} m" + tiltNote + BlockedNote());
     }
 
     // ───────────── 기둥 ─────────────
@@ -397,22 +403,88 @@ public partial class MainWindow
         string blocked = BlockedNote();
         RemoveItems(_gapCandidates, targets);
 
-        // 이어서 완전히 닫힌 내부는 Unknown으로 (장애물 · 확률값이 AMR 연산 대상이 되지 않도록). 별도 실행 취소 단위
+        // 이어서 주행 공간과 끊긴 곳(막힌 방 안 · 갇힌 장애물 · 확률값)은 Unknown으로. 별도 실행 취소 단위
         string inner = "";
         if (EncloseUnknownCheck.IsChecked == true && filled.Count > 0)
         {
-            List<int[]> rooms;
-            using (new WaitCursor()) rooms = WallCleanup.FindEnclosedInteriors(_map, _occThreshold, filled);
+            List<Blob> rooms;
+            using (new WaitCursor()) rooms = WallCleanup.FindIsolatedNear(_map, _occThreshold, filled);
             if (rooms.Count > 0)
             {
-                BeginEdit($"닫힌 내부 Unknown {rooms.Count}곳", useClip: false);
-                foreach (int[] room in rooms)
-                    foreach (int i in room) _tracker.SetIndex(i, MapValues.Unknown);
+                BeginEdit($"막힌 구역 Unknown {rooms.Count}곳", useClip: false);
+                foreach (Blob room in rooms)
+                    foreach (int i in room.Pixels!) _tracker.SetIndex(i, MapValues.Unknown);
                 int m = CommitEdit();
-                if (m > 0) inner = $" · 닫힌 내부 {rooms.Count}곳 → Unknown ({m:N0} px, Ctrl+Z로 이것만 되돌림)";
+                if (m > 0) inner = $" · 막힌 구역 {rooms.Count}곳 → Unknown ({m:N0} px, Ctrl+Z로 이것만 되돌림)";
             }
         }
         SetStatus($"벽 끊김 {targets.Count:N0}개 연결 ({n:N0} px)" + inner + blocked);
+    }
+
+    // ───────────── 고립 구역 ─────────────
+
+    /// <summary>주행 공간의 이 비율 이상인 고립 구역은 실제 주행 구역일 수 있어 기본 체크 해제</summary>
+    private const double IsolatedLargeShare = 0.05;
+
+    private void OnDetectIsolated(object sender, RoutedEventArgs e)
+    {
+        if (_map == null) return;
+        PixelRegion? region = _selection;   // 선택 영역이 있으면 그 안에 완전히 들어오는 구역만 (주행 공간 판단은 맵 전체 기준)
+        var sw = Stopwatch.StartNew();
+        IsolatedResult r;
+        using (new WaitCursor()) r = WallCleanup.FindIsolated(_map, _occThreshold, region);
+        List<Blob> groups = r.Groups;
+        var open = new Dictionary<Blob, int>();
+        for (int k = 0; k < groups.Count; k++) open[groups[k]] = r.OpenCounts[k];
+        int excluded = groups.RemoveAll(TouchesProtect);
+
+        ResetCandidates();
+        _bulk = true;
+        int index = 1, large = 0;
+        foreach (Blob b in groups)
+        {
+            bool isLarge = open[b] >= r.MainArea * IsolatedLargeShare;
+            if (isLarge) large++;
+            _isoCandidates.Add(Track(BlobItem.Isolated(index++, b, _meta.Resolution, isLarge)));
+        }
+        _bulk = false;
+        RefreshMarkers();
+        AfterDetect(groups.Count);
+
+        double res = _meta.Resolution;
+        string main = r.MainArea > 0 ? $" (주행 공간 {r.MainArea * res * res:0.#} m² 기준)" : " (주행 공간 없음)";
+        SetStatus($"고립 구역 후보 {groups.Count:N0}개 · {ScopeName()}{main} ({sw.ElapsedMilliseconds} ms)" +
+                  (large > 0 ? $" · 큰 구역 {large}개는 체크 해제 상태" : "") +
+                  (excluded > 0 ? $" · 보호 영역 {excluded}개 제외" : ""));
+    }
+
+    private void OnIsolatedSelected(object sender, SelectionChangedEventArgs e)
+    {
+        if (IsoList.SelectedItem is BlobItem item) FocusOn(item.Blob.Bounds);
+    }
+
+    private void OnToggleAllIsolated(object sender, RoutedEventArgs e) => ToggleAll(_isoCandidates);
+
+    private void OnApplyIsolated(object sender, RoutedEventArgs e)
+    {
+        if (_map == null || _tracker == null) return;
+        List<BlobItem> targets = _isoCandidates.Where(c => c.IsChecked).ToList();
+        if (targets.Count == 0)
+        {
+            SetStatus("체크된 후보가 없습니다.");
+            return;
+        }
+
+        BeginEdit($"고립 구역 Unknown {targets.Count}곳", useClip: false);   // 찾을 때 범위를 이미 반영
+        using (new WaitCursor())
+        {
+            foreach (BlobItem t in targets)
+                if (t.Blob.Pixels != null)
+                    foreach (int i in t.Blob.Pixels) _tracker.SetIndex(i, MapValues.Unknown);
+        }
+        int n = CommitEdit();
+        RemoveItems(_isoCandidates, targets);
+        SetStatus($"고립 구역 {targets.Count:N0}곳 → Unknown ({n:N0} px)" + BlockedNote());
     }
 
     // ───────────── 확률값 / 외곽 ─────────────
@@ -545,8 +617,7 @@ public partial class MainWindow
         UpdateAxisText();
 
         _selection = null;
-        _candidates.Clear();
-        _gapCandidates.Clear();
+        ResetCandidates();
         _updateAreas.Clear();
         _focusMarker = null;
 

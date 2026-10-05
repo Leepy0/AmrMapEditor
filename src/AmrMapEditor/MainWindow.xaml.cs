@@ -59,6 +59,7 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<BlobItem> _candidates = new();
     private readonly ObservableCollection<BlobItem> _dupCandidates = new();
     private readonly ObservableCollection<BlobItem> _gapCandidates = new();
+    private readonly ObservableCollection<BlobItem> _isoCandidates = new();
     private readonly ObservableCollection<RegionItem> _diffRegions = new();
     private MapMarker? _focusMarker;
     private bool _bulk;   // 일괄 변경 중 마커 갱신 억제
@@ -70,6 +71,7 @@ public partial class MainWindow : Window
         CandidateList.ItemsSource = _candidates;
         DupList.ItemsSource = _dupCandidates;
         GapList.ItemsSource = _gapCandidates;
+        IsoList.ItemsSource = _isoCandidates;
         DiffRegionList.ItemsSource = _diffRegions;
         ProtectList.ItemsSource = _protect;
         DxfLayerList.ItemsSource = _dxfLayers;
@@ -198,6 +200,7 @@ public partial class MainWindow : Window
         _candidates.Clear();
         _dupCandidates.Clear();
         _gapCandidates.Clear();
+        _isoCandidates.Clear();
         _diffRegions.Clear();
         _updateAreas.Clear();
         _updateMask = null;

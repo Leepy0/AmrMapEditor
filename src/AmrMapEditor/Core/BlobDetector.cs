@@ -145,8 +145,10 @@ public static class BlobDetector
     }
 
     /// <summary>
-    /// 덩어리를 Free로 지움. 검출 후 편집된 픽셀 보호를 위해 현재도 기준값 이상인 픽셀만 변경.
-    /// expand > 0 이면 주변 expand px 이내의 확률값(기준 미만) 픽셀도 Free로 정리
+    /// 덩어리를 지움. 검출 후 편집된 픽셀 보호를 위해 현재도 기준값 이상인 픽셀만 변경.
+    /// 지운 자리는 주변 배경값: 둘레가 주로 Unknown(건물 밖 · 미탐색 구역)이면 Unknown, 아니면 Free
+    /// (건물 밖 점을 Free로 지우면 그 자리에 고립된 Free가 남음).
+    /// expand > 0 이면 주변 expand px 이내의 확률값(기준 미만) 픽셀도 같은 값으로 정리
     /// </summary>
     public static int Erase(Blob blob, EditTracker tracker, byte threshold, int expand)
     {
@@ -154,10 +156,11 @@ public static class BlobDetector
         MapImage map = tracker.Map;
         int w = map.Width;
         byte[] data = map.Data;
+        byte fill = Background(blob, map, threshold);
         int n = 0;
 
         foreach (int i in blob.Pixels)
-            if (data[i] >= threshold && tracker.SetIndex(i, MapValues.Free)) n++;
+            if (data[i] >= threshold && tracker.SetIndex(i, fill)) n++;
 
         if (expand <= 0) return n;
 
@@ -170,9 +173,35 @@ public static class BlobDetector
                 int nx = cx + dx, ny = cy + dy;
                 if (!map.InBounds(nx, ny)) continue;
                 byte v = data[ny * w + nx];
-                if (MapValues.IsProbability(v) && v < threshold && tracker.Set(nx, ny, MapValues.Free)) n++;
+                if (MapValues.IsProbability(v) && v < threshold && tracker.Set(nx, ny, fill)) n++;
             }
         }
         return n;
+    }
+
+    /// <summary>덩어리 둘레(8방향 이웃 중 덩어리 밖 · 기준값 미만)에서 Unknown이 더 많으면 Unknown, 아니면 Free</summary>
+    public static byte Background(Blob blob, MapImage map, byte threshold)
+    {
+        if (blob.Pixels == null || blob.Pixels.Length == 0) return MapValues.Free;
+        int w = map.Width, h = map.Height;
+        byte[] data = map.Data;
+        var inBlob = new HashSet<int>(blob.Pixels);
+        var counted = new HashSet<int>();
+        int unknown = 0, other = 0;
+        foreach (int i in blob.Pixels)
+        {
+            int cx = i % w, cy = i / w;
+            for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                int nx = cx + dx, ny = cy + dy;
+                if ((uint)nx >= (uint)w || (uint)ny >= (uint)h) continue;
+                int j = ny * w + nx;
+                if (inBlob.Contains(j) || data[j] >= threshold || !counted.Add(j)) continue;
+                if (data[j] == MapValues.Unknown) unknown++;
+                else other++;
+            }
+        }
+        return unknown > other ? MapValues.Unknown : MapValues.Free;
     }
 }

@@ -211,11 +211,11 @@
 
                         <Border Style="{StaticResource RailDivider}" />
                         <RadioButton x:Name="ToolPick" Style="{StaticResource ToolRadio}" Tag="CandidatePick" Checked="OnToolChecked"
-                                     ToolTip="후보 선택  V&#x0a;후보 찾기 결과를 맵에서 클릭해 체크 / 해제합니다.&#x0a;후보를 찾으면 자동으로 선택됩니다.">
+                                     ToolTip="후보 선택  V&#x0a;후보 찾기 결과(노이즈 · 벽 끊김 · 이중 벽 · 고립 구역)를 맵에서 클릭해 체크 / 해제합니다.&#x0a;후보를 찾으면 자동으로 선택됩니다.">
                             <Path Style="{StaticResource Icon}" Data="{StaticResource I.Pointer}" />
                         </RadioButton>
                         <RadioButton x:Name="ToolBlobPick" Style="{StaticResource ToolRadio}" Tag="BlobPick" Checked="OnToolChecked"
-                                     ToolTip="객체 삭제  D&#x0a;클릭한 장애물 덩어리 전체를 Free로.">
+                                     ToolTip="객체 삭제  D&#x0a;클릭한 장애물 덩어리 전체를 지웁니다.&#x0a;지운 자리는 주변 배경값(건물 밖이면 Unknown, 안이면 Free).">
                             <Path Style="{StaticResource Icon}" Data="{StaticResource I.BlobDelete}" />
                         </RadioButton>
                         <RadioButton x:Name="ToolRestore" Style="{StaticResource ToolRadio}" Tag="Restore" Checked="OnToolChecked"
@@ -818,7 +818,7 @@
                                                 </Grid.ColumnDefinitions>
                                                 <TextBlock Text="주변 정리" Style="{StaticResource RowLabel}" />
                                                 <TextBox x:Name="NoiseExpandBox" Grid.Column="1" Style="{StaticResource NumberBox}" Width="56" Text="1"
-                                                         ToolTip="삭제할 때 객체 주변 N px 안의 확률값(기준값 미만)도 Free로 정리합니다." />
+                                                         ToolTip="삭제할 때 객체 주변 N px 안의 확률값(기준값 미만)도 함께 정리합니다 (주변 배경값으로)." />
                                                 <TextBlock Grid.Column="2" Text="px" Style="{StaticResource OptionUnit}" />
                                             </Grid>
                                         </StackPanel>
@@ -852,7 +852,7 @@
                                         </Grid>
                                         <ListBox x:Name="GapList" MaxHeight="180" ItemTemplate="{StaticResource CheckItemTemplate}" SelectionChanged="OnGapSelected" />
                                         <CheckBox x:Name="EncloseUnknownCheck" Style="{StaticResource Switch}" Content="막힌 내부는 Unknown으로" IsChecked="True" Margin="0,8,0,0"
-                                                  ToolTip="틈을 이어 벽이 완전히 닫히면 그 안(장애물 · 확률값 포함)을 Unknown(0)으로 바꿔&#x0a;AMR 연산 대상에서 뺍니다. 맵 가장자리에 닿거나 주행 공간 대부분을 차지하는 영역은 제외합니다.&#x0a;별도 작업으로 기록되어 Ctrl+Z로 이것만 되돌릴 수 있습니다." />
+                                                  ToolTip="틈을 이어 주행 공간과 끊긴 곳(막힌 방 안 · 그 안의 장애물 · 확률값)을 Unknown(0)으로 바꿔&#x0a;AMR 연산 대상에서 뺍니다. 주행 공간의 30% 이상인 큰 구역은 제외합니다.&#x0a;별도 작업으로 기록되어 Ctrl+Z로 이것만 되돌릴 수 있습니다.&#x0a;틈 잇기 없이 닫힌 곳은 아래 '고립 구역 정리'로 찾습니다." />
                                         <Button Style="{StaticResource PrimaryButton}" Margin="0,8,0,0" Click="OnFillGaps">
                                             <StackPanel Orientation="Horizontal">
                                                 <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Check}" />
@@ -941,6 +941,41 @@
                                             <CheckBox x:Name="PillarFillCheck" Style="{StaticResource Switch}" Content="기둥 속 채우기" IsChecked="True" Margin="0,6,0,0" />
                                         </StackPanel>
                                     </Expander>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- 고립 구역 -->
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource CardTitle}" Text="고립 구역 정리" />
+                                        <ContentControl Style="{StaticResource InfoTip}"
+                                                        ToolTip="주행 공간(Free가 가장 넓게 이어진 영역)과 이어지지 않은 곳을 찾아 Unknown(0)으로 바꿉니다.&#x0a;닫힌 방 안 (안의 장애물 · 확률값 포함), 창문 너머 산란점, 벽 바깥에 붙은 확률값 등이 대상입니다.&#x0a;주행 공간의 5% 이상인 큰 구역은 실제 주행 구역일 수 있어 체크 해제 상태로 표시합니다." />
+                                    </StackPanel>
+                                    <Button Margin="0,10,0,0" Click="OnDetectIsolated">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Search}" />
+                                            <TextBlock Text="후보 찾기" />
+                                        </StackPanel>
+                                    </Button>
+                                    <StackPanel x:Name="IsoResults" Visibility="Collapsed" Margin="0,10,0,0">
+                                        <Grid Margin="8,0,0,6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox x:Name="IsoAllCheck" Click="OnToggleAllIsolated" ToolTip="모두 체크 / 해제" />
+                                            <TextBlock x:Name="IsoCountText" Grid.Column="1" Style="{StaticResource Caption}" Margin="8,0,0,0"
+                                                       ToolTip="맵에서 후보를 클릭해도 체크 / 해제됩니다 (후보 선택 도구 V)" />
+                                        </Grid>
+                                        <ListBox x:Name="IsoList" MaxHeight="200" ItemTemplate="{StaticResource CheckItemTemplate}" SelectionChanged="OnIsolatedSelected" />
+                                        <Button Style="{StaticResource PrimaryButton}" Margin="0,8,0,0" Click="OnApplyIsolated">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Check}" />
+                                                <TextBlock Text="체크한 구역 Unknown으로" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
 

@@ -8,7 +8,7 @@ using AmrMapEditor.Core;
 
 namespace AmrMapEditor.Controls;
 
-public enum MarkerKind { Candidate, Excluded, Focus, Duplicate, Gap }
+public enum MarkerKind { Candidate, Excluded, Focus, Duplicate, Gap, Isolated }
 
 public readonly record struct MapMarker(IntRect Rect, MarkerKind Kind);
 
@@ -60,6 +60,7 @@ public sealed class MapView : FrameworkElement
     private static readonly Pen LightDashPen = Frozen(new Pen(Brushes.White, 1) { DashStyle = DashStyles.Dash });
     private static readonly Pen DuplicatePen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0xE5, 0x3E, 0x3E)), 1.5));
     private static readonly Pen GapPen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0x00, 0xB8, 0xD4)), 1.5));
+    private static readonly Pen IsolatedPen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0x7C, 0x3A, 0xED)), 1.5));
     private static readonly Pen UpdateAreaPen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0x25, 0x63, 0xEB)), 1.5));
     private static readonly Brush UpdateAreaFill = Frozen(new SolidColorBrush(Color.FromArgb(22, 0x25, 0x63, 0xEB)));
     private static readonly Pen ProtectPen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0x16, 0xA3, 0x4A)), 1.5));
@@ -365,6 +366,7 @@ public sealed class MapView : FrameworkElement
                 MarkerKind.Excluded => ExcludedPen,
                 MarkerKind.Duplicate => DuplicatePen,
                 MarkerKind.Gap => GapPen,
+                MarkerKind.Isolated => IsolatedPen,
                 _ => FocusPen,
             };
             dc.DrawRectangle(null, pen, rect);
