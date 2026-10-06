@@ -24,16 +24,22 @@ public sealed record PolygonPreview(IReadOnlyList<PointD> Points, PointD Cursor)
 
 public sealed class MapMouseEventArgs : EventArgs
 {
-    public MapMouseEventArgs(int x, int y, ModifierKeys modifiers, int clickCount)
+    public MapMouseEventArgs(int x, int y, ModifierKeys modifiers, int clickCount, double imageX = double.NaN, double imageY = double.NaN)
     {
         X = x;
         Y = y;
         Modifiers = modifiers;
         ClickCount = clickCount;
+        ImageX = double.IsNaN(imageX) ? x + 0.5 : imageX;
+        ImageY = double.IsNaN(imageY) ? y + 0.5 : imageY;
     }
 
     public int X { get; }
     public int Y { get; }
+
+    /// <summary>이미지 연속 좌표 (소수점 포함, 맞출 맵 끌기 · 회전용)</summary>
+    public double ImageX { get; }
+    public double ImageY { get; }
     public ModifierKeys Modifiers { get; }
 
     /// <summary>MouseDown에서 더블클릭이면 2</summary>
@@ -68,6 +74,8 @@ public sealed class MapView : FrameworkElement
     private static readonly Brush DxfBrush = Frozen(new SolidColorBrush(Color.FromArgb(220, 0xF9, 0x73, 0x16)));
     private static readonly Brush LinePreviewBrush = Frozen(new SolidColorBrush(Color.FromArgb(120, 255, 140, 0)));
     private static readonly Brush RectPreviewBrush = Frozen(new SolidColorBrush(Color.FromArgb(40, 255, 200, 0)));
+    private static readonly Brush SecondBackdropBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xB4, 0xBE, 0xCB)));
+    private static readonly Pen SecondOutlinePen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0xD9, 0x46, 0xEF)), 1.5) { DashStyle = DashStyles.Dash });
 
     private readonly DrawingVisual _content = new();
     private readonly DrawingVisual _cursor = new();
@@ -89,6 +97,12 @@ public sealed class MapView : FrameworkElement
     private IReadOnlyList<RegionOverlay> _regions = Array.Empty<RegionOverlay>();
     private Geometry? _dxf;
     private bool _showDxf = true;
+
+    // 맞출 맵 레이어 (자체 크기 비트맵 + 현재 맵 좌표로의 변환)
+    private BitmapSource? _second;
+    private Matrix? _secondPose;
+    private IReadOnlyList<PointD>? _secondOutline;
+    private double _secondOpacity = 0.85;
 
     public MapView()
     {
@@ -174,6 +188,42 @@ public sealed class MapView : FrameworkElement
         }
     }
 
+    /// <summary>맞출 맵 레이어 불투명도 (0~1)</summary>
+    public double SecondOpacity
+    {
+        get => _secondOpacity;
+        set
+        {
+            _secondOpacity = Math.Clamp(value, 0, 1);
+            RenderContent();
+        }
+    }
+
+    /// <summary>맞출 맵 표시 비트맵 (맞출 맵 픽셀 크기). null이면 외곽선만</summary>
+    public void SetSecondLayer(BitmapSource? bitmap)
+    {
+        _second = bitmap;
+        RenderContent();
+    }
+
+    /// <summary>맞출 맵 → 현재 맵 좌표 변환과 외곽선(현재 맵 좌표). pose가 null이면 레이어 전체 숨김</summary>
+    public void SetSecondPose(Matrix? pose, IReadOnlyList<PointD>? outline)
+    {
+        _secondPose = pose;
+        _secondOutline = outline;
+        RenderContent();
+    }
+
+    /// <summary>화면 중앙의 이미지 좌표</summary>
+    public PointD ViewCenterImage
+    {
+        get
+        {
+            Point p = ScreenToImage(new Point(ActualWidth / 2, ActualHeight / 2));
+            return new PointD(p.X, p.Y);
+        }
+    }
+
     public CursorPreview? Preview
     {
         get => _preview;
@@ -211,6 +261,9 @@ public sealed class MapView : FrameworkElement
         _selection = null;
         _preview = null;
         _dxf = null;
+        _second = null;
+        _secondPose = null;
+        _secondOutline = null;
         RenderContent();
         RenderCursor();
     }
@@ -336,6 +389,24 @@ public sealed class MapView : FrameworkElement
         var imgRect = new Rect(_offX, _offY, ImageWidth * _zoom, ImageHeight * _zoom);
         dc.DrawImage(_base, imgRect);
         if (_overlay != null) dc.DrawImage(_overlay, imgRect);
+        if (_second != null && _secondPose is Matrix pose)
+        {
+            // 현재 맵 밖으로 나간 맞출 맵 부분에는 Unknown 색 바탕 → 합쳤을 때 모양이 보이게
+            if (_secondOutline is { Count: > 2 } hull)
+            {
+                var outside = new CombinedGeometry(GeometryCombineMode.Exclude, ScreenPolyline(hull, true, true), new RectangleGeometry(imgRect));
+                dc.DrawGeometry(SecondBackdropBrush, null, outside);
+            }
+
+            // 맞출 맵 픽셀 좌표 → 현재 맵 좌표 → 화면
+            Matrix m = pose;
+            m.Append(new Matrix(_zoom, 0, 0, _zoom, _offX, _offY));
+            dc.PushTransform(new MatrixTransform(m));
+            dc.PushOpacity(_secondOpacity);
+            dc.DrawImage(_second, new Rect(0, 0, _second.PixelWidth, _second.PixelHeight));
+            dc.Pop();
+            dc.Pop();
+        }
         dc.DrawRectangle(null, ImageBorderPen, imgRect);
 
         if (ShowGrid && _zoom >= GridMinZoom) DrawGrid(dc, imgRect, vw, vh);
@@ -371,6 +442,9 @@ public sealed class MapView : FrameworkElement
             };
             dc.DrawRectangle(null, pen, rect);
         }
+
+        if (_secondPose != null && _secondOutline is { Count: > 1 } outline)
+            dc.DrawGeometry(null, SecondOutlinePen, ScreenPolyline(outline, true));
 
         if (_selection != null)
         {
@@ -578,7 +652,7 @@ public sealed class MapView : FrameworkElement
     private MapMouseEventArgs CreateArgs(Point p, int clickCount = 0)
     {
         Point ip = ScreenToImage(p);
-        return new MapMouseEventArgs((int)Math.Floor(ip.X), (int)Math.Floor(ip.Y), Keyboard.Modifiers, clickCount);
+        return new MapMouseEventArgs((int)Math.Floor(ip.X), (int)Math.Floor(ip.Y), Keyboard.Modifiers, clickCount, ip.X, ip.Y);
     }
 
     private static T Frozen<T>(T f) where T : Freezable

@@ -270,6 +270,7 @@ public partial class MainWindow
         }
         CancelDrag();
         CancelPolygon();
+        CancelPair();
         _alignStep = 1;
         _alignMarks.Clear();
         RefreshMarkers();

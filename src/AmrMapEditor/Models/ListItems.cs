@@ -62,6 +62,13 @@ public sealed class RegionItem
         Detail = $"{region.Area:N0} px · {region.Bounds.Width}×{region.Bounds.Height} · ({region.Bounds.X}, {region.Bounds.Y})";
     }
 
+    public RegionItem(int index, IntRect bounds, string detail)
+    {
+        Bounds = bounds;
+        Title = $"{index}";
+        Detail = detail;
+    }
+
     public IntRect Bounds { get; }
     public string Title { get; }
     public string Detail { get; }

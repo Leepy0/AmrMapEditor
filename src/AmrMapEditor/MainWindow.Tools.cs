@@ -29,6 +29,7 @@ public partial class MainWindow
         EditTool.Wall => ToolWall,
         EditTool.Pillar => ToolPillar,
         EditTool.CandidatePick => ToolPick,
+        EditTool.SecondMove => ToolSecond,
         _ => ToolRestore,
     };
 
@@ -42,6 +43,8 @@ public partial class MainWindow
             CancelDrag();
             CancelPolygon();
             CancelAlign(true);
+            CancelPair();
+            EndSecondDrag();
             _tool = tool;
             MapViewer.Preview = null;
             SetStatus(ToolHint(tool));
@@ -62,6 +65,7 @@ public partial class MainWindow
         EditTool.Wall => "벽 직선화: 벽(들)을 감싸듯 드래그, 여러 벽도 각각 인식 (정리 탭 › 벽 · 기둥 옵션에서 두께·스냅 설정)",
         EditTool.Pillar => "기둥 정리: 기둥을 클릭하면 사각형으로 정리",
         EditTool.CandidatePick => "후보 선택: 맵에서 후보를 클릭해 체크 / 해제",
+        EditTool.SecondMove => "맞출 맵 이동: 드래그 = 이동, Shift+드래그 = 회전 (Ctrl 함께 = 1° 단위), 방향키 1px (Shift 10px), 쉼표 · 마침표 0.1° (Shift 1°)",
         _ => "복원 브러시: 칠한 부분을 기준 맵 값으로 되돌림",
     };
 
@@ -70,6 +74,7 @@ public partial class MainWindow
         EditTool.Brush => "브러시",
         EditTool.Eraser => "지우개",
         EditTool.Restore => "복원 브러시",
+        EditTool.SecondMove => "맞출 맵 이동",
         _ => tool.ToString(),
     };
 
@@ -96,6 +101,11 @@ public partial class MainWindow
             HandleAlignClick(e.X, e.Y);
             return;
         }
+        if (_pairStep > 0)
+        {
+            HandlePairClick(e.X, e.Y);
+            return;
+        }
         if (_dragging) FinishDrag(e.X, e.Y, e.Modifiers);   // 비정상 종료된 드래그 정리
 
         int x = e.X, y = e.Y;
@@ -109,6 +119,7 @@ public partial class MainWindow
                     SetStatus("복원 브러시는 기준 맵이 필요합니다. 업데이트 탭에서 기준 맵을 먼저 여세요.");
                     return;
                 }
+                if (_tool == EditTool.Restore) _refEdited = true;
                 BeginEdit(ToolName(_tool));
                 _dragging = true;
                 _lastX = x;
@@ -155,6 +166,10 @@ public partial class MainWindow
             case EditTool.CandidatePick:
                 ToggleCandidateAt(x, y);
                 break;
+
+            case EditTool.SecondMove:
+                BeginSecondDrag(e);
+                break;
         }
     }
 
@@ -162,6 +177,12 @@ public partial class MainWindow
     {
         UpdateCursorStatus(e.X, e.Y);
         if (_map == null) return;
+
+        if (_secondDragging)
+        {
+            UpdateSecondDrag(e);
+            return;
+        }
 
         if (_dragging)
         {
@@ -189,13 +210,14 @@ public partial class MainWindow
             return;
         }
 
-        MapViewer.Preview = _alignStep == 0 && (IsBrushTool(_tool) || _tool == EditTool.Line)
+        MapViewer.Preview = _alignStep == 0 && _pairStep == 0 && (IsBrushTool(_tool) || _tool == EditTool.Line)
             ? new BrushPreview(e.X, e.Y, _brushSize, _brushRound)
             : new BrushPreview(e.X, e.Y, 1, false);
     }
 
     private void OnMapMouseUp(object? sender, MapMouseEventArgs e)
     {
+        if (_secondDragging) EndSecondDrag();
         if (_dragging) FinishDrag(e.X, e.Y, e.Modifiers);
     }
 

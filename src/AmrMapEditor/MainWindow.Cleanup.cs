@@ -142,7 +142,7 @@ public partial class MainWindow
         AddMarkers(list, _dupCandidates, MarkerKind.Duplicate, DupResults, DupAllCheck, DupCountText);
         AddMarkers(list, _gapCandidates, MarkerKind.Gap, GapResults, GapAllCheck, GapCountText);
         AddMarkers(list, _isoCandidates, MarkerKind.Isolated, IsoResults, IsoAllCheck, IsoCountText);
-        foreach (PointD m in _alignMarks)
+        foreach (PointD m in _alignMarks.Concat(_pairMarks))
             list.Add(new MapMarker(new IntRect((int)Math.Floor(m.X) - 2, (int)Math.Floor(m.Y) - 2, 5, 5), MarkerKind.Focus));
         if (_focusMarker is MapMarker f) list.Add(f);
         MapViewer.Markers = list;
@@ -606,10 +606,22 @@ public partial class MainWindow
             UpdateDxfPlacementUi();
         }
 
+        // 맞출 맵은 현재 맵과 같이 회전한 자세로 (q' = Move(R(θ)p + T) = R(θ - a)p + Move(T))
+        if (_second != null)
+        {
+            PointD t = Move(new PointD(_secondPose.Tx, _secondPose.Ty));
+            _secondPose = new MapPose(MapPose.NormalizeDeg(_secondPose.AngleDeg - axis), t.X, t.Y);
+            _secondHistory.Clear();
+            _secondDiff = null;
+            _secondRegions.Clear();
+            ClearAlignResult();
+            CancelPair();
+        }
+
         _map = res.Image;
         _meta.OriginX = res.OriginX;
         _meta.OriginY = res.OriginY;
-        _metaChanged = true;
+        MarkMetaChanged("기울기 보정");
         _tracker = new EditTracker(_map);
         _undo.Clear();
         _opLog.Add($"{DateTime.Now:HH:mm:ss} 기울기 보정 {axis:0.00}° ({oldW}×{oldH} → {_map.Width}×{_map.Height})");
@@ -632,6 +644,12 @@ public partial class MainWindow
         UpdateInfo();
         UpdateSelectionUi();
         UpdateUndoButtons();
+        if (_second != null)
+        {
+            RefreshSecondUi();
+            RefreshSecondLayer();
+            ApplySecondPose();
+        }
         SetStatus($"기울기 보정 완료: {axis:0.00}° 회전, {_map.Width} × {_map.Height}. 저장 시 yaml origin 갱신");
     }
 }

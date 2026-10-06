@@ -18,6 +18,9 @@ public partial class MainWindow
 {
     private const int MaxDiffRegions = 1000;
 
+    // 벽 불일치가 이보다 크면 같은 좌표계에서 업데이트한 맵이 아닌 것으로 봄 (같은 좌표계 업데이트는 보통 5~20%)
+    private const double MismatchLimit = 0.35;
+
     private MapImage? _reference;           // 현재 맵 좌표로 정렬된 기준 맵
     private string? _referenceName;
     private MapOverlayMode _overlayMode = MapOverlayMode.Diff;
@@ -25,6 +28,7 @@ public partial class MainWindow
     private bool[]? _updateMask;
     private OffsetResult? _lastOffset;
     private bool _dupDetected;
+    private bool _refEdited;   // 기준 맵 값으로 되돌린 편집이 있음 (닫을 때 안내)
 
     // ───────────── 1. 기준 맵 ─────────────
 
@@ -75,10 +79,38 @@ public partial class MainWindow
             note = "왼쪽 아래 기준 정렬 (yaml 없음)";
         }
 
-        _reference = dx == 0 && dy == 0 && sameSize ? r : MapAlign.Shift(r, _map.Width, _map.Height, dx, dy);
-        _referenceName = Path.GetFileName(dlg.FileName);
-        RefFileText.Text = _referenceName + (note.Length > 0 ? $" · {note}" : "");
-        RefFileText.ToolTip = dlg.FileName + (note.Length > 0 ? $"\n{note}" : "");
+        MapImage aligned = dx == 0 && dy == 0 && sameSize ? r : MapAlign.Shift(r, _map.Width, _map.Height, dx, dy);
+
+        // 따로 그린 맵(다른 좌표계)이면 업데이트 보정이 기준 맵 내용을 현재 맵에 덮어씀 → 맞추기 탭 권장
+        double mismatch;
+        using (new WaitCursor()) mismatch = UpdateCorrection.ObstacleMismatch(_map, aligned, _occThreshold);
+        if (mismatch > MismatchLimit)
+        {
+            MessageBoxResult choice = MessageBox.Show(this,
+                $"두 맵의 벽이 {mismatch:P0} 어긋납니다. 같은 좌표계에서 업데이트한 맵이 아닐 수 있습니다.\n" +
+                "이 상태로 업데이트 보정(영역 밖 되돌리기 · 옮겨서 합치기)을 하면 기준 맵 내용이 현재 맵에 덮어써집니다.\n\n" +
+                "[예]  맞추기 탭에서 위치를 맞춰 비교 (권장)\n[아니요]  그대로 기준 맵으로 열기",
+                "기준 맵 열기", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
+            if (choice == MessageBoxResult.Cancel) return;
+            if (choice == MessageBoxResult.Yes)
+            {
+                OpenSecond(dlg.FileName, r);
+                return;
+            }
+            note += (note.Length > 0 ? " · " : "") + $"⚠ 벽 {mismatch:P0} 어긋남";
+        }
+
+        SetReference(aligned, Path.GetFileName(dlg.FileName), note, dlg.FileName);
+    }
+
+    /// <summary>기준 맵 지정 (현재 맵 좌표로 정렬된 상태)</summary>
+    private void SetReference(MapImage aligned, string name, string note, string? path = null)
+    {
+        _reference = aligned;
+        _referenceName = name;
+        _refEdited = false;
+        RefFileText.Text = name + (note.Length > 0 ? $" · {note}" : "");
+        RefFileText.ToolTip = (path ?? name) + (note.Length > 0 ? $"\n{note}" : "");
         _diffRegions.Clear();
         _dupCandidates.Clear();
         _dupDetected = false;
@@ -95,22 +127,36 @@ public partial class MainWindow
         UpdateDiffStats();
     }
 
-    private void OnCloseReference(object sender, RoutedEventArgs e) => CloseReference();
+    private void OnCloseReference(object sender, RoutedEventArgs e)
+    {
+        bool edited = _refEdited;
+        CloseReference();
+        SetStatus(edited
+            ? "기준 맵을 닫았습니다. 기준 맵 값으로 되돌린 편집은 현재 맵에 남아 있으며 실행 취소(Ctrl+Z)로 되돌릴 수 있습니다."
+            : "기준 맵을 닫았습니다.");
+    }
 
+    /// <summary>기준 맵과 그에 딸린 표시 · 상태(변경점 오버레이, 업데이트 영역, 후보, 어긋남 값)를 모두 정리</summary>
     private void CloseReference()
     {
         _reference = null;
         _referenceName = null;
+        _refEdited = false;
         _lastOffset = null;
         _dupDetected = false;
         RefFileText.Text = "";
         RefFileText.ToolTip = null;
         OffsetText.Text = "";
         OffsetText.ToolTip = null;
+        RealignDxBox.Text = "0";
+        RealignDyBox.Text = "0";
         _diffRegions.Clear();
         _dupCandidates.Clear();
         _focusMarker = null;
+        _updateAreas.Clear();
+        UpdateAreasChanged();   // 업데이트 영역 외곽선도 지움
         RebuildOverlay();
+        MapViewer.Refresh();
         RefreshMarkers();
         RefreshUpdateGuide();
         if (_tool == EditTool.Restore) SelectTool(EditTool.Brush);
@@ -145,6 +191,7 @@ public partial class MainWindow
 
     private void UpdateDiffStats()
     {
+        InvalidateSecondDiff(false);   // 맞추기 탭 비교도 현재 맵 기준이라 다시 계산
         if (_map == null || _reference == null)
         {
             RefreshUpdateGuide();
@@ -215,7 +262,10 @@ public partial class MainWindow
             return;
         }
 
+        if (!ConfirmReferenceWrite("영역 밖 되돌리기", "영역 밖 변경을 모두 기준 맵 값으로 바꾸므로")) return;
+
         int n;
+        _refEdited = true;
         BeginEdit("영역 밖 변경 복원", useClip: false);
         using (new WaitCursor())
         {
@@ -226,6 +276,19 @@ public partial class MainWindow
     }
 
     // ───────────── 4. 어긋남 / 재정렬 ─────────────
+
+    /// <summary>
+    /// 기준 맵 값을 넓게 덮어쓰는 작업 전 확인. 두 맵 벽이 많이 어긋나면(따로 그린 맵) 경고하고 맞추기 탭을 안내
+    /// </summary>
+    private bool ConfirmReferenceWrite(string title, string what)
+    {
+        double mm;
+        using (new WaitCursor()) mm = UpdateCorrection.ObstacleMismatch(_map!, _reference!, _occThreshold);
+        if (mm <= MismatchLimit) return true;
+        return Confirm($"기준 맵과 현재 맵의 벽이 {mm:P0} 어긋납니다 (같은 좌표계에서 업데이트한 맵이면 보통 {MismatchLimit:P0} 미만).\n" +
+                       $"{what} 기준 맵 내용이 현재 맵에 덮어써질 수 있습니다.\n\n" +
+                       "따로 그린 맵이면 취소하고 '맞추기' 탭에서 위치를 맞춰 비교 · 반영하세요. 그래도 계속할까요?", title);
+    }
 
     private void OnEstimateOffset(object sender, RoutedEventArgs e)
     {
@@ -292,7 +355,13 @@ public partial class MainWindow
             return;
         }
 
+        if (!ConfirmReferenceWrite("옮겨서 합치기", _updateMask == null
+                ? "업데이트 영역이 없어 맵 전체에서 기준 맵과 다른 픽셀을 옮기고 빈 자리를 기준 맵 값으로 채우므로"
+                : "옮기기 전 자리를 기준 맵 값으로 채우므로"))
+            return;
+
         int moved;
+        _refEdited = true;
         BeginEdit($"업데이트분 이동 ({dx}, {dy})", useClip: false);
         using (new WaitCursor())
         {
@@ -355,6 +424,7 @@ public partial class MainWindow
         if (!ReadInt(DupExpandBox, 0, 10, "주변 정리", out int expand)) return;
 
         long n = 0;
+        _refEdited = true;
         BeginEdit($"이중 벽 복원 {targets.Count}개", useClip: false);
         using (new WaitCursor())
         {
@@ -385,6 +455,7 @@ public partial class MainWindow
         }
 
         EditTracker tracker = _tracker;
+        _refEdited = true;
         BeginEdit("선택 영역 복원");
         s.ForEach((x, y) => tracker.Set(x, y, reference.Get(x, y)));
         int n = CommitEdit();

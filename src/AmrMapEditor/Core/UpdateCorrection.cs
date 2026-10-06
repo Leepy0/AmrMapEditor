@@ -54,6 +54,44 @@ public sealed class OffsetResult
 /// <summary>기존 맵(기준)에 업데이트가 덧그려진 맵 보정</summary>
 public static class UpdateCorrection
 {
+    /// <summary>
+    /// 두 맵(같은 크기) 벽 불일치 비율: 상대 맵이 알고 있는 곳(Unknown 아님)에 놓인 장애물 중
+    /// 상대 맵 장애물과 1px 이내에 없는 비율. 같은 좌표계에서 업데이트한 맵이면 작고, 따로 그린 맵이면 큼.
+    /// 비교할 장애물이 없으면 1
+    /// </summary>
+    public static double ObstacleMismatch(MapImage a, MapImage b, byte thr)
+    {
+        long total = 0, miss = 0;
+        Count(a, b);
+        Count(b, a);
+        return total == 0 ? 1 : (double)miss / total;
+
+        void Count(MapImage p, MapImage q)
+        {
+            int w = p.Width, h = p.Height;
+            byte[] pd = p.Data, qd = q.Data;
+            for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                int i = y * w + x;
+                if (pd[i] < thr || qd[i] == MapValues.Unknown) continue;
+                total++;
+                bool near = false;
+                for (int dy = -1; dy <= 1 && !near; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int nx = x + dx, ny = y + dy;
+                    if ((uint)nx < (uint)w && (uint)ny < (uint)h && qd[ny * w + nx] >= thr)
+                    {
+                        near = true;
+                        break;
+                    }
+                }
+                if (!near) miss++;
+            }
+        }
+    }
+
     /// <summary>업데이트 영역 밖에서 기준 맵과 다른 픽셀 수</summary>
     public static long CountOutside(MapImage cur, MapImage reference, bool[] areaMask)
     {

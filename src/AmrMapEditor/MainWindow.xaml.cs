@@ -16,7 +16,7 @@ using Microsoft.Win32;
 
 namespace AmrMapEditor;
 
-public enum EditTool { Brush, Eraser, Line, Rect, Fill, Picker, Select, Polygon, BlobPick, Restore, Wall, Pillar, CandidatePick }
+public enum EditTool { Brush, Eraser, Line, Rect, Fill, Picker, Select, Polygon, BlobPick, Restore, Wall, Pillar, CandidatePick, SecondMove }
 
 public partial class MainWindow : Window
 {
@@ -34,7 +34,8 @@ public partial class MainWindow : Window
     private MapImage? _original;     // 열기/저장 시점 스냅샷 (저장 전 검증, 변경 이력용)
     private string? _path;
     private MapMeta _meta = new();
-    private bool _metaChanged;       // 기울기 보정으로 크기·origin 변경됨 → 저장 시 yaml/사이드카 갱신
+    private bool _metaChanged;       // 기울기 보정 · 합치기로 크기·origin 변경됨 → 저장 시 yaml/사이드카 갱신
+    private string? _metaChangeReason;
 
     // 편집
     private EditTracker? _tracker;
@@ -73,6 +74,7 @@ public partial class MainWindow : Window
         GapList.ItemsSource = _gapCandidates;
         IsoList.ItemsSource = _isoCandidates;
         DiffRegionList.ItemsSource = _diffRegions;
+        SecondDiffList.ItemsSource = _secondRegions;
         ProtectList.ItemsSource = _protect;
         DxfLayerList.ItemsSource = _dxfLayers;
 
@@ -98,6 +100,7 @@ public partial class MainWindow : Window
         UpdateSelectionUi();
         RefreshMarkers();
         RefreshUpdateGuide();
+        RefreshSecondUi();
     }
 
     private IntRect Full => _map?.Bounds ?? IntRect.Empty;
@@ -115,6 +118,7 @@ public partial class MainWindow : Window
     {
         OccThresholdBox, NoiseMaxAreaBox, NoiseMaxSideBox, NoiseExpandBox, OffsetRadiusBox, OffsetAngleBox,
         DupDistBox, DupMinAreaBox, DupExpandBox, SnapTolBox, WallThicknessBox, GapMaxBox, GapMinRunBox, FreeMaxBox,
+        SecondRadiusBox, SecondAngleBox,
     };
 
     private void LoadSettings()
@@ -182,12 +186,14 @@ public partial class MainWindow : Window
         CancelPolygon();
         CancelAlign(true);
         CloseReference();
+        CloseSecond();
         CloseDxf();
 
         _map = map;
         _original = map.Clone();
         _path = path;
         _metaChanged = false;
+        _metaChangeReason = null;
         _tracker = new EditTracker(map);
         _undo.Clear();
         _opLog.Clear();
@@ -240,6 +246,7 @@ public partial class MainWindow : Window
 
         CancelAlign(true);
         CloseReference();
+        CloseSecond();
         CloseDxf();
 
         string? name = _path != null ? Path.GetFileName(_path) : null;
@@ -247,6 +254,7 @@ public partial class MainWindow : Window
         _original = null;
         _path = null;
         _metaChanged = false;
+        _metaChangeReason = null;
         _tracker = null;
         _undo.Clear();
         _opLog.Clear();
@@ -339,6 +347,7 @@ public partial class MainWindow : Window
             _original = _map.Clone();
             _opLog.Clear();
             _metaChanged = false;
+            _metaChangeReason = null;
             SetDirty(false);
             UpdateInfo();
             SetStatus($"저장 완료: {Path.GetFileName(path)}" +
@@ -433,8 +442,11 @@ public partial class MainWindow : Window
 
         if (map.Width != orig.Width || map.Height != orig.Height)
         {
-            sb.AppendLine($"⚠ 크기 변경: {orig.Width} × {orig.Height} → {map.Width} × {map.Height}");
-            sb.AppendLine("   좌표계가 바뀌었습니다. 스테이션·경로를 다시 티칭해야 합니다.");
+            sb.AppendLine($"⚠ 크기 변경: {orig.Width} × {orig.Height} → {map.Width} × {map.Height}" +
+                          (_metaChangeReason != null ? $"  ({_metaChangeReason})" : ""));
+            sb.AppendLine(_metaChangeReason != null && !_metaChangeReason.Contains("기울기")
+                ? "   기존 영역의 월드 좌표는 그대로입니다. 원본을 남기려면 '다른 이름으로 저장'을 쓰세요."
+                : "   좌표계가 바뀌었습니다. 스테이션·경로를 다시 티칭해야 합니다.");
             sb.AppendLine(_meta.SourcePath != null
                 ? "   yaml origin을 함께 갱신합니다."
                 : $"   yaml이 없어 origin ({_meta.OriginX:0.###}, {_meta.OriginY:0.###})은 직접 반영해야 합니다.");
@@ -600,6 +612,7 @@ public partial class MainWindow : Window
             UpdateAxisText();
             RebuildOverlay();
             UpdateDiffStats();
+            RefreshSecondLayer();   // 맞출 맵 장애물 색도 임계값 기준
         }
         else
         {
@@ -649,6 +662,13 @@ public partial class MainWindow : Window
 
         if (inText) return;
 
+        // 맞출 맵 이동 도구: 방향키 이동, 쉼표 · 마침표 회전
+        if (_tool == EditTool.SecondMove && HandleSecondKey(e.Key, shift))
+        {
+            e.Handled = true;
+            return;
+        }
+
         switch (e.Key)
         {
             case Key.Space:
@@ -668,6 +688,11 @@ public partial class MainWindow : Window
             case Key.W: SelectTool(EditTool.Wall); e.Handled = true; break;
             case Key.C: SelectTool(EditTool.Pillar); e.Handled = true; break;
             case Key.V: SelectTool(EditTool.CandidatePick); e.Handled = true; break;
+            case Key.A:
+                if (_second != null) SelectTool(EditTool.SecondMove);
+                else SetStatus("맞출 맵 이동(A)은 맞추기 탭에서 맞출 맵을 연 뒤 쓸 수 있습니다.");
+                e.Handled = true;
+                break;
             case Key.F: MapViewer.FitToView(); e.Handled = true; break;
             case Key.Enter when _polyPoints.Count > 0:
                 FinishPolygon();
@@ -702,6 +727,7 @@ public partial class MainWindow : Window
                 break;
             case Key.Escape:
                 if (_alignStep > 0) CancelAlign(true);
+                else if (_pairStep > 0) CancelPair();
                 else if (_polyPoints.Count > 0) CancelPolygon();
                 else if (_dragging && _tool is EditTool.Line or EditTool.Rect or EditTool.Select or EditTool.Wall)
                 {
@@ -725,6 +751,15 @@ public partial class MainWindow : Window
     }
 
     // ───────────── 상태 표시 ─────────────
+
+    /// <summary>크기 · origin이 바뀌는 작업 기록 (저장 시 yaml 갱신, 저장 확인창 안내)</summary>
+    private void MarkMetaChanged(string reason)
+    {
+        _metaChangeReason = _metaChanged && _metaChangeReason != null && !_metaChangeReason.Contains(reason)
+            ? $"{_metaChangeReason} + {reason}"
+            : reason;
+        _metaChanged = true;
+    }
 
     private void SetDirty(bool dirty)
     {
@@ -758,7 +793,7 @@ public partial class MainWindow : Window
         string yaml = _meta.SourcePath != null
             ? $"origin ({_meta.OriginX:0.###}, {_meta.OriginY:0.###})"
             : "yaml 없음 · 해상도 직접 입력";
-        string changed = _metaChanged ? "\n⚠ 기울기 보정됨 · 저장 시 origin 갱신" : "";
+        string changed = _metaChanged ? $"\n⚠ {_metaChangeReason ?? "크기 변경"} · 저장 시 origin 갱신" : "";
         FileNameText.Text = Path.GetFileName(_path);
         FileMetaText.Text = $"{_map.Width} × {_map.Height} px · {yaml}{changed}";
         FileMetaText.ToolTip = $"{_path}\n{_map.Format}, maxval {_map.MaxVal}" +
