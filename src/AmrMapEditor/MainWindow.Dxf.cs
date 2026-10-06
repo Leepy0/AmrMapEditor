@@ -69,6 +69,7 @@ public partial class MainWindow
         DxfUnitText.Text = "";
         DxfEmptyPanel.Visibility = Visibility.Visible;
         DxfContentPanel.Visibility = Visibility.Collapsed;
+        RefreshStatusChips();
     }
 
     /// <summary>맵에 연결된 도면이 있으면 불러옴</summary>
@@ -88,18 +89,22 @@ public partial class MainWindow
     private bool LoadDxf(string path, DxfLink? link)
     {
         DxfDrawing d;
-        try
+        while (true)
         {
-            using (new WaitCursor()) d = DxfReader.Read(path);
-        }
-        catch (Exception ex)
-        {
-            ShowError($"도면을 읽을 수 없습니다.\n{path}\n\n{ex.Message}");
-            return false;
+            try
+            {
+                using (new WaitCursor()) d = DxfReader.Read(path);
+                break;
+            }
+            catch (Exception ex)
+            {
+                if (!ShowFailure("도면을 열 수 없습니다", path, ex, canRetry: true)) return false;
+            }
         }
         if (d.Polylines.Count == 0)
         {
-            ShowError("도면에 표시할 선이 없습니다. (LINE, POLYLINE, CIRCLE, ARC, INSERT만 지원)");
+            ShowError("도면에 표시할 선이 없습니다",
+                "LINE · LWPOLYLINE · POLYLINE · CIRCLE · ARC · INSERT만 표시합니다. CAD에서 해당 객체로 분해(EXPLODE)한 뒤 ASCII DXF로 저장해 보세요.");
             return false;
         }
 
@@ -138,6 +143,7 @@ public partial class MainWindow
         SyncLayersAllCheck();
         UpdateDxfPlacementUi();
         RebuildDxfGeometry();
+        RefreshStatusChips();
         return true;
     }
 
@@ -198,7 +204,8 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            SetStatus($"도면 연결 저장 실패: {ex.Message}");
+            ErrorReport.Write(ex, "도면 연결 저장");
+            SetStatus($"도면 연결을 저장하지 못했습니다 · {ErrorReport.Describe(ex).Cause}");
         }
     }
 

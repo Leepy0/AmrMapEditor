@@ -4,8 +4,8 @@
         xmlns:ctl="clr-namespace:AmrMapEditor.Controls"
         Title="AMR Map Editor" Width="1480" Height="920" MinWidth="1040" MinHeight="660"
         WindowStartupLocation="CenterScreen"
-        FontFamily="Segoe UI Variable Text, Segoe UI, Malgun Gothic" FontSize="13"
-        Foreground="{StaticResource LabelBrush}" Background="{StaticResource InspectorBrush}"
+        FontFamily="Segoe UI Variable Text, Segoe UI, Malgun Gothic" FontSize="14"
+        Foreground="{DynamicResource LabelBrush}" Background="{DynamicResource InspectorBrush}"
         TextOptions.TextFormattingMode="Display" UseLayoutRounding="True"
         AllowDrop="True" Drop="OnDropFile"
         PreviewKeyDown="OnPreviewKeyDown" PreviewKeyUp="OnPreviewKeyUp"
@@ -16,13 +16,13 @@
             <Setter Property="Width" Value="1" />
             <Setter Property="Height" Value="20" />
             <Setter Property="Margin" Value="8,0" />
-            <Setter Property="Background" Value="{StaticResource ChromeLineBrush}" />
+            <Setter Property="Background" Value="{DynamicResource ChromeLineBrush}" />
         </Style>
         <Style x:Key="RailDivider" TargetType="Border">
             <Setter Property="Width" Value="24" />
             <Setter Property="Height" Value="1" />
             <Setter Property="Margin" Value="0,6" />
-            <Setter Property="Background" Value="{StaticResource ChromeLineBrush}" />
+            <Setter Property="Background" Value="{DynamicResource ChromeLineBrush}" />
         </Style>
         <Style x:Key="Pane" TargetType="ScrollViewer">
             <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
@@ -30,30 +30,30 @@
             <Setter Property="Focusable" Value="False" />
         </Style>
         <Style x:Key="PaneHeader" TargetType="TextBlock" BasedOn="{StaticResource SectionHeader}">
-            <Setter Property="Margin" Value="4,4,0,6" />
+            <Setter Property="Margin" Value="4,4,0,8" />
         </Style>
         <Style x:Key="EmptyTitle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontSize" Value="18" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="HorizontalAlignment" Value="Center" />
-            <Setter Property="Margin" Value="0,14,0,4" />
+            <Setter Property="Margin" Value="0,16,0,4" />
         </Style>
         <Style x:Key="EmptyBody" TargetType="TextBlock" BasedOn="{StaticResource Caption}">
-            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontSize" Value="12" />
             <Setter Property="TextAlignment" Value="Center" />
             <Setter Property="HorizontalAlignment" Value="Center" />
-            <Setter Property="LineHeight" Value="19" />
+            <Setter Property="LineHeight" Value="18" />
         </Style>
         <Style x:Key="EmptyIcon" TargetType="Border">
             <Setter Property="Width" Value="56" />
             <Setter Property="Height" Value="56" />
             <Setter Property="CornerRadius" Value="28" />
-            <Setter Property="Background" Value="{StaticResource AccentSoftBrush}" />
+            <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
             <Setter Property="HorizontalAlignment" Value="Center" />
         </Style>
         <!-- 옵션 행: 라벨 | 입력 | 단위 -->
         <Style x:Key="OptionRow" TargetType="Grid">
-            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="Margin" Value="0,0,0,8" />
         </Style>
         <Style x:Key="OptionUnit" TargetType="TextBlock" BasedOn="{StaticResource Unit}">
             <Setter Property="MinWidth" Value="84" />
@@ -61,14 +61,14 @@
         <DataTemplate x:Key="ProtectItemTemplate">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Margin="0,0,8,0" />
-                <TextBlock Text="{Binding Region}" Foreground="{StaticResource SecondaryLabelBrush}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Region}" Foreground="{DynamicResource SecondaryLabelBrush}" TextTrimming="CharacterEllipsis" />
             </StackPanel>
         </DataTemplate>
         <DataTemplate x:Key="LayerItemTemplate">
             <CheckBox IsChecked="{Binding IsVisible, Mode=TwoWay}">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="{Binding CountText}" Foreground="{StaticResource TertiaryLabelBrush}" Margin="6,0,0,0" />
+                    <TextBlock Text="{Binding CountText}" Foreground="{DynamicResource SecondaryLabelBrush}" Margin="8,0,0,0" FontFamily="{StaticResource MonoFont}" FontSize="12" VerticalAlignment="Center" />
                 </StackPanel>
             </CheckBox>
         </DataTemplate>
@@ -76,8 +76,8 @@
 
     <DockPanel>
         <!-- ═════════ 툴바 ═════════ -->
-        <Border DockPanel.Dock="Top" Height="50" Padding="10,0" Background="{StaticResource ChromeBrush}"
-                BorderBrush="{StaticResource ChromeLineBrush}" BorderThickness="0,0,0,1">
+        <Border x:Name="ToolbarRoot" DockPanel.Dock="Top" Height="48" Padding="12,0" Background="{DynamicResource ChromeBrush}"
+                BorderBrush="{DynamicResource ChromeLineBrush}" BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -86,7 +86,7 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Style="{StaticResource IconButton}" Click="OnOpen" ToolTip="열기  Ctrl+O&#x0a;파일을 창에 끌어놓아도 열립니다.">
+                    <Button x:Name="OpenButton" Style="{StaticResource IconButton}" Click="OnOpen" ToolTip="열기  Ctrl+O&#x0a;파일을 창에 끌어놓아도 열립니다.">
                         <Path Style="{StaticResource Icon}" Data="{StaticResource I.Open}" />
                     </Button>
                     <Button x:Name="SaveButton" Style="{StaticResource IconButton}" Click="OnSave" ToolTip="저장  Ctrl+S">
@@ -133,44 +133,94 @@
                     <Button Style="{StaticResource IconButton}" Click="OnFit" ToolTip="화면 맞춤  F">
                         <Path Style="{StaticResource Icon}" Data="{StaticResource I.Fit}" />
                     </Button>
+                    <ToggleButton x:Name="ThemeToggle" Style="{StaticResource IconToggle}" Click="OnThemeToggle"
+                                  ToolTip="다크 모드&#x0a;처음에는 Windows 설정을 따릅니다.">
+                        <Path Style="{StaticResource Icon}" Data="{StaticResource I.Moon}" />
+                    </ToggleButton>
                     <Border Style="{StaticResource ToolbarDivider}" />
                     <Button Style="{StaticResource IconButton}" ToolTipService.InitialShowDelay="0" ToolTipService.ShowDuration="60000"
-                            ToolTip="휠  확대 / 축소&#x0a;가운데 버튼 · Space+드래그  화면 이동&#x0a;F  화면 맞춤&#x0a;[ ]  브러시 크기&#x0a;1 · 2 · 3  Free · 장애물 · Unknown&#x0a;Esc  선택 해제 / 진행 중인 작업 취소&#x0a;Ctrl+D  선택 해제">
+                            ToolTip="휠  확대 / 축소&#x0a;가운데 버튼 · Space+드래그  화면 이동&#x0a;F  화면 맞춤&#x0a;[ ]  브러시 크기&#x0a;1 · 2 · 3  Free · 장애물 · Unknown&#x0a;A  맞출 맵 이동 (방향키 1px · 쉼표 · 마침표 0.1°)&#x0a;Ctrl+1~5  오른쪽 탭 (편집 · 업데이트 · 맞추기 · 정리 · 도면)&#x0a;F6 / Shift+F6  도구 막대 · 도구 · 맵 · 오른쪽 패널 사이 이동&#x0a;Esc  선택 해제 / 진행 중인 작업 취소&#x0a;Ctrl+D  선택 해제">
                         <Path Style="{StaticResource Icon}" Data="{StaticResource I.Help}" />
                     </Button>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!-- ═════════ 상태바 ═════════ -->
-        <Border DockPanel.Dock="Bottom" Height="26" Padding="12,0" Background="{StaticResource ChromeBrush}"
-                BorderBrush="{StaticResource ChromeLineBrush}" BorderThickness="0,1,0,0"
-                TextElement.FontSize="11.5" TextElement.Foreground="{StaticResource SecondaryLabelBrush}">
+        <!-- ═════════ 상태바: 결과 · 되돌리기 · 진행 | 상태 칩 | 커서 위치 ═════════ -->
+        <Border DockPanel.Dock="Bottom" Height="28" Padding="12,0" Background="{DynamicResource ChromeBrush}"
+                BorderBrush="{DynamicResource ChromeLineBrush}" BorderThickness="0,1,0,0"
+                TextElement.FontSize="12" TextElement.Foreground="{DynamicResource SecondaryLabelBrush}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock x:Name="StatusMessage" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                           Foreground="{StaticResource LabelBrush}" />
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" ClipToBounds="True">
+                    <TextBlock x:Name="StatusMessage" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource LabelBrush}" />
+                    <Button x:Name="StatusUndoButton" Style="{StaticResource LinkButton}" Margin="12,0,0,0" Visibility="Collapsed"
+                            Click="OnUndo" ToolTip="방금 한 작업을 되돌립니다.">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Icon}" Data="{StaticResource I.Undo}" Stretch="Uniform" Width="12" Height="12" Margin="0,0,4,0" />
+                            <TextBlock Text="되돌리기  Ctrl+Z" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <ProgressBar x:Name="StatusProgress" Width="96" Height="6" Margin="12,0,0,0" Maximum="100" Visibility="Collapsed" VerticalAlignment="Center" />
+                    <Button x:Name="StatusCancelButton" Style="{StaticResource LinkButton}" Content="취소" Margin="8,0,0,0" Visibility="Collapsed"
+                            Click="OnCancelBusy" ToolTip="진행 중인 작업 취소  Esc" />
+                </StackPanel>
+                <!-- 상태 칩: 다른 탭에 있어도 열린 맵 · 보호 영역 · 저장 안 됨을 항상 보여줌 -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
-                    <TextBlock x:Name="StatusValue" MinWidth="140" />
-                    <TextBlock x:Name="StatusPos" MinWidth="110" Text="-" />
-                    <TextBlock x:Name="StatusWorld" MinWidth="140" />
-                    <TextBlock x:Name="StatusZoom" MinWidth="44" TextAlignment="Right" />
+                    <Button x:Name="RefChip" Style="{StaticResource StatusChip}" Click="OnChipReference" Visibility="Collapsed" ToolTip="기준 맵 · 업데이트 탭으로">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Icon}" Data="{StaticResource I.Layers}" Stretch="Uniform" Width="12" Height="12" Margin="0,0,4,0" />
+                            <TextBlock x:Name="RefChipText" VerticalAlignment="Center" MaxWidth="160" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="SecondChip" Style="{StaticResource StatusChip}" Click="OnChipSecond" Visibility="Collapsed" ToolTip="맞출 맵 · 맞추기 탭으로">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Icon}" Data="{StaticResource I.Merge}" Stretch="Uniform" Width="12" Height="12" Margin="0,0,4,0" />
+                            <TextBlock x:Name="SecondChipText" VerticalAlignment="Center" MaxWidth="160" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="DxfChip" Style="{StaticResource StatusChip}" Click="OnChipDxf" Visibility="Collapsed" ToolTip="도면 · 도면 탭으로">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Icon}" Data="{StaticResource I.Map}" Stretch="Uniform" Width="12" Height="12" Margin="0,0,4,0" />
+                            <TextBlock x:Name="DxfChipText" VerticalAlignment="Center" MaxWidth="160" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="ProtectChip" Style="{StaticResource StatusChip}" Click="OnChipProtect" Visibility="Collapsed" ToolTip="보호 영역 · 편집 탭으로">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource Icon}" Data="{StaticResource I.Shield}" Stretch="Uniform" Width="12" Height="12" Margin="0,0,4,0" />
+                            <TextBlock x:Name="ProtectChipText" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="DirtyChip" Style="{StaticResource StatusChip}" Click="OnSave" Visibility="Collapsed"
+                            Background="{DynamicResource WarningSoftBrush}" BorderBrush="{DynamicResource WarningSoftBrush}"
+                            Foreground="{DynamicResource WarningTextBrush}" ToolTip="저장하지 않은 변경이 있습니다 · 눌러서 저장  Ctrl+S">
+                        <TextBlock Text="● 편집됨" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </Button>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="1" Height="16" Background="{DynamicResource ChromeLineBrush}" Margin="0,0,12,0" />
+                    <TextBlock x:Name="StatusValue" MinWidth="128" />
+                    <TextBlock x:Name="StatusPos" Width="96" Text="-" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" />
+                    <TextBlock x:Name="StatusWorld" Width="128" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" />
+                    <TextBlock x:Name="StatusZoom" Width="56" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" />
                 </StackPanel>
             </Grid>
         </Border>
 
         <!-- ═════════ 좌측 도구 ═════════ -->
-        <Border DockPanel.Dock="Left" Width="56" Background="{StaticResource ChromeBrush}"
-                BorderBrush="{StaticResource ChromeLineBrush}" BorderThickness="0,0,1,0">
+        <Border x:Name="RailRoot" DockPanel.Dock="Left" Width="56" Background="{DynamicResource ChromeBrush}"
+                BorderBrush="{DynamicResource ChromeLineBrush}" BorderThickness="0,0,1,0">
             <DockPanel>
                 <!-- 현재 그리기 값 -->
-                <Button x:Name="RailSwatchButton" DockPanel.Dock="Bottom" Style="{StaticResource IconButton}" Width="38" Height="38"
-                        Margin="0,6,0,10" HorizontalAlignment="Center" Click="OnRailSwatchClick">
-                    <Border x:Name="RailSwatch" Width="22" Height="22" CornerRadius="6" Background="#000000"
-                            BorderBrush="#40000000" BorderThickness="1" />
+                <Button x:Name="RailSwatchButton" DockPanel.Dock="Bottom" Style="{StaticResource IconButton}" Width="40" Height="40"
+                        Margin="0,8,0,12" HorizontalAlignment="Center" Click="OnRailSwatchClick">
+                    <Border x:Name="RailSwatch" Width="24" Height="24" CornerRadius="4" Background="{StaticResource ValueObstacleBrush}"
+                            BorderBrush="{DynamicResource SwatchBorderBrush}" BorderThickness="1" />
                 </Button>
                 <ScrollViewer VerticalScrollBarVisibility="Hidden" Focusable="False">
                     <StackPanel Margin="0,8" HorizontalAlignment="Center">
@@ -240,28 +290,28 @@
         </Border>
 
         <!-- ═════════ 우측 인스펙터 ═════════ -->
-        <Border DockPanel.Dock="Right" Width="324" Background="{StaticResource InspectorBrush}"
-                BorderBrush="{StaticResource ChromeLineBrush}" BorderThickness="1,0,0,0">
+        <Border x:Name="InspectorRoot" DockPanel.Dock="Right" Width="336" Background="{DynamicResource InspectorBrush}"
+                BorderBrush="{DynamicResource ChromeLineBrush}" BorderThickness="1,0,0,0">
             <DockPanel>
-                <Border DockPanel.Dock="Top" Padding="12,12,12,10">
+                <Border DockPanel.Dock="Top" Padding="12,12,12,12">
                     <Border Style="{StaticResource SegmentTrack}">
                         <UniformGrid Rows="1">
-                            <RadioButton x:Name="SegEdit" Style="{StaticResource SegmentRadio}" GroupName="Pane" Content="편집" IsChecked="True" Padding="2,0" />
-                            <RadioButton x:Name="SegUpdate" Style="{StaticResource SegmentRadio}" GroupName="Pane" Content="업데이트" Padding="2,0"
-                                         ToolTip="업데이트 전 기준 맵과 비교해 보정" />
-                            <RadioButton x:Name="SegSecond" Style="{StaticResource SegmentRadio}" GroupName="Pane" Content="맞추기" Padding="2,0"
-                                         ToolTip="다른 맵과 위치를 맞춰 비교 · 반영 · 합치기" />
-                            <RadioButton x:Name="SegClean" Style="{StaticResource SegmentRadio}" GroupName="Pane" Content="정리" Padding="2,0"
-                                         ToolTip="노이즈 · 벽 · 기둥 정리" />
-                            <RadioButton x:Name="SegDxf" Style="{StaticResource SegmentRadio}" GroupName="Pane" Content="도면" Padding="2,0"
-                                         ToolTip="DXF 도면 겹쳐보기" />
+                            <RadioButton x:Name="SegEdit" Style="{StaticResource SegmentRadio}" GroupName="Pane" Content="편집" IsChecked="True" Padding="0" ToolTip="편집  Ctrl+1" />
+                            <RadioButton x:Name="SegUpdate" Style="{StaticResource SegmentRadio}" GroupName="Pane" Content="업데이트" Padding="0"
+                                         ToolTip="업데이트 전 기준 맵과 비교해 보정  Ctrl+2" />
+                            <RadioButton x:Name="SegSecond" Style="{StaticResource SegmentRadio}" GroupName="Pane" Content="맞추기" Padding="0"
+                                         ToolTip="다른 맵과 위치를 맞춰 비교 · 반영 · 합치기  Ctrl+3" />
+                            <RadioButton x:Name="SegClean" Style="{StaticResource SegmentRadio}" GroupName="Pane" Content="정리" Padding="0"
+                                         ToolTip="노이즈 · 벽 · 기둥 정리  Ctrl+4" />
+                            <RadioButton x:Name="SegDxf" Style="{StaticResource SegmentRadio}" GroupName="Pane" Content="도면" Padding="0"
+                                         ToolTip="DXF 도면 겹쳐보기  Ctrl+5" />
                         </UniformGrid>
                     </Border>
                 </Border>
 
                 <!-- 작업 대상: 선택 영역이 있으면 편집 · 검출 · 정리는 그 안에서만 -->
-                <Border x:Name="ScopeBar" DockPanel.Dock="Top" Margin="12,0,12,10" MinHeight="34" Padding="10,0,4,0" CornerRadius="8"
-                        Background="{StaticResource CardBrush}" BorderBrush="{StaticResource CardLineBrush}" BorderThickness="1"
+                <Border x:Name="ScopeBar" DockPanel.Dock="Top" Margin="12,0,12,12" MinHeight="32" Padding="12,0,4,0" CornerRadius="8"
+                        Background="{DynamicResource CardBrush}"
                         ToolTip="작업 대상&#x0a;선택 영역이 있으면 편집 · 후보 찾기 · 정리가 그 안에서만 실행됩니다.&#x0a;없으면 맵 전체가 대상입니다.">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -270,9 +320,9 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <Path x:Name="ScopeIcon" Style="{StaticResource Icon}" Data="{StaticResource I.Select}" Stretch="Uniform"
-                              Width="15" Height="15" Stroke="{StaticResource SecondaryLabelBrush}" />
+                              Width="15" Height="15" Stroke="{DynamicResource SecondaryLabelBrush}" />
                         <TextBlock x:Name="ScopeText" Grid.Column="1" Margin="8,0" Text="대상  맵 전체" VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis" Foreground="{StaticResource SecondaryLabelBrush}" />
+                                   TextTrimming="CharacterEllipsis" Foreground="{DynamicResource SecondaryLabelBrush}" />
                         <Button x:Name="ScopeClearButton" Grid.Column="2" Style="{StaticResource SmallIconButton}" Click="OnClearSelection"
                                 ToolTip="선택 해제  Esc" Visibility="Collapsed">
                             <Path Style="{StaticResource Icon}" Data="{StaticResource I.Close}" />
@@ -291,12 +341,12 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <Border Width="34" Height="34" CornerRadius="8" Background="{StaticResource AccentSoftBrush}" VerticalAlignment="Top">
-                                        <Path Style="{StaticResource Icon}" Data="{StaticResource I.Map}" Stroke="{StaticResource AccentBrush}" />
+                                    <Border Width="32" Height="32" CornerRadius="8" Background="{DynamicResource AccentSoftBrush}" VerticalAlignment="Top">
+                                        <Path Style="{StaticResource Icon}" Data="{StaticResource I.Map}" Stroke="{DynamicResource AccentTextBrush}" />
                                     </Border>
-                                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                    <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
                                         <TextBlock x:Name="FileNameText" Style="{StaticResource CardTitle}" TextTrimming="CharacterEllipsis" Text="열린 맵 없음" />
-                                        <TextBlock x:Name="FileMetaText" Style="{StaticResource Caption}" Margin="0,2,0,0" Text="Ctrl+O 또는 파일을 끌어놓으세요" />
+                                        <TextBlock x:Name="FileMetaText" Style="{StaticResource Caption}" Margin="0,4,0,0" Text="Ctrl+O 또는 파일을 끌어놓으세요" />
                                     </StackPanel>
                                 </Grid>
                             </Border>
@@ -304,23 +354,23 @@
                             <TextBlock Style="{StaticResource PaneHeader}" Text="그리기 값" />
                             <Border Style="{StaticResource Card}">
                                 <StackPanel>
-                                    <UniformGrid Columns="4" Margin="0,0,-6,0">
-                                        <RadioButton x:Name="ValueFree" Style="{StaticResource SwatchRadio}" Background="{StaticResource ValueFreeBrush}"
+                                    <UniformGrid Columns="4" Margin="0,0,-8,0">
+                                        <RadioButton x:Name="ValueFree" Style="{StaticResource SwatchRadio}" Background="{DynamicResource ValueFreeBrush}"
                                                      Content="Free" Checked="OnValueRadioChecked" ToolTip="Free · 1   단축키 1" />
-                                        <RadioButton x:Name="ValueObstacle" Style="{StaticResource SwatchRadio}" Background="{StaticResource ValueObstacleBrush}"
+                                        <RadioButton x:Name="ValueObstacle" Style="{StaticResource SwatchRadio}" Background="{DynamicResource ValueObstacleBrush}"
                                                      Content="장애물" IsChecked="True" Checked="OnValueRadioChecked" ToolTip="장애물 · 254   단축키 2" />
-                                        <RadioButton x:Name="ValueUnknown" Style="{StaticResource SwatchRadio}" Background="{StaticResource ValueUnknownBrush}"
+                                        <RadioButton x:Name="ValueUnknown" Style="{StaticResource SwatchRadio}" Background="{DynamicResource ValueUnknownBrush}"
                                                      Content="Unknown" Checked="OnValueRadioChecked" ToolTip="Unknown · 0   단축키 3" />
-                                        <RadioButton x:Name="ValueCustom" Style="{StaticResource SwatchRadio}" Background="{StaticResource ValueCustomBrush}"
+                                        <RadioButton x:Name="ValueCustom" Style="{StaticResource SwatchRadio}" Background="{DynamicResource ValueCustomBrush}"
                                                      Content="직접" Checked="OnValueRadioChecked" ToolTip="원하는 값 입력 (254, 0xFE, FEFEFE)&#x0a;스포이드(I)로 고른 값도 여기로 들어옵니다." />
                                     </UniformGrid>
-                                    <Grid Margin="0,10,0,0">
+                                    <Grid Margin="0,12,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
-                                        <Border x:Name="ValueSwatch" Width="14" Height="14" CornerRadius="4" BorderBrush="#40000000" BorderThickness="1" />
+                                        <Border x:Name="ValueSwatch" Width="16" Height="16" CornerRadius="4" BorderBrush="{DynamicResource SwatchBorderBrush}" BorderThickness="1" />
                                         <TextBlock x:Name="ValueText" Grid.Column="1" Style="{StaticResource Caption}" Margin="8,0,0,0" />
                                         <TextBox x:Name="CustomValueBox" Grid.Column="2" Style="{StaticResource NumberBox}" Width="72" Text="128"
                                                  ToolTip="10진수, 0xFE, FEFEFE 형식" TextChanged="OnCustomValueChanged"
@@ -342,14 +392,14 @@
                                         <Slider x:Name="BrushSizeSlider" Grid.Column="1" Minimum="1" Maximum="60" Value="3"
                                                 IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"
                                                 ValueChanged="OnBrushSizeChanged" ToolTip="[ ] 키로 조절" />
-                                        <StackPanel Grid.Column="2" Orientation="Horizontal" MinWidth="46" Margin="10,0,0,0">
-                                            <TextBlock x:Name="BrushSizeText" Text="3" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                            <TextBlock Text="px" Style="{StaticResource Unit}" Margin="3,0,0,0" />
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" MinWidth="46" Margin="12,0,0,0">
+                                            <TextBlock x:Name="BrushSizeText" Text="3" Style="{StaticResource Numeric}" />
+                                            <TextBlock Text="px" Style="{StaticResource Unit}" Margin="4,0,0,0" />
                                         </StackPanel>
                                     </Grid>
                                     <Border Style="{StaticResource Hairline}" />
                                     <CheckBox x:Name="BrushRoundCheck" Style="{StaticResource Switch}" Content="원형 브러시" Click="OnBrushShapeChanged" />
-                                    <CheckBox x:Name="RectFillCheck" Style="{StaticResource Switch}" Content="사각형 속 채우기" IsChecked="True" Margin="0,6,0,0" />
+                                    <CheckBox x:Name="RectFillCheck" Style="{StaticResource Switch}" Content="사각형 속 채우기" IsChecked="True" Margin="0,8,0,0" />
                                 </StackPanel>
                             </Border>
 
@@ -358,7 +408,7 @@
                                 <StackPanel>
                                     <CheckBox x:Name="ClipToSelectionCheck" Style="{StaticResource Switch}" Content="선택 영역 안에서만 편집" IsChecked="True"
                                               ToolTip="끄면 선택 영역이 있어도 브러시 등 일반 편집이 맵 전체에 적용됩니다." />
-                                    <Button x:Name="FillSelectionButton" Margin="0,10,0,0" Click="OnFillSelection" IsEnabled="False"
+                                    <Button x:Name="FillSelectionButton" Margin="0,12,0,0" Click="OnFillSelection" IsEnabled="False"
                                             ToolTip="선택 영역 전체를 현재 그리기 값으로 채웁니다.">
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Fill}" />
@@ -368,7 +418,7 @@
                                 </StackPanel>
                             </Border>
 
-                            <StackPanel Orientation="Horizontal" Margin="4,4,0,6">
+                            <StackPanel Orientation="Horizontal" Margin="4,4,0,8">
                                 <TextBlock Style="{StaticResource SectionHeader}" Text="보호 영역" />
                                 <ContentControl Style="{StaticResource InfoTip}"
                                                 ToolTip="충전 · 도킹 스테이션, 반사판처럼 지우면 안 되는 곳.&#x0a;모든 편집과 후보 찾기에서 제외되며 &lt;맵&gt;.protect.json에 저장됩니다." />
@@ -383,19 +433,19 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <TextBox x:Name="ProtectNameBox" Text="충전 스테이션" ToolTip="추가할 보호 영역 이름" />
-                                        <Button x:Name="AddProtectButton" Grid.Column="1" Style="{StaticResource SmallIconButton}" Width="28" Height="26" Margin="6,0,0,0"
-                                                Foreground="{StaticResource AccentBrush}" Click="OnAddProtect" IsEnabled="False"
+                                        <Button x:Name="AddProtectButton" Grid.Column="1" Style="{StaticResource SmallIconButton}" Width="32" Height="32" Margin="8,0,0,0"
+                                                Foreground="{DynamicResource AccentBrush}" Click="OnAddProtect" IsEnabled="False"
                                                 ToolTip="선택 영역을 보호 영역으로 추가">
                                             <Path Style="{StaticResource Icon}" Data="{StaticResource I.Plus}" />
                                         </Button>
-                                        <Button x:Name="RemoveProtectButton" Grid.Column="2" Style="{StaticResource SmallIconButton}" Width="28" Height="26"
+                                        <Button x:Name="RemoveProtectButton" Grid.Column="2" Style="{StaticResource SmallIconButton}" Width="32" Height="32"
                                                 Click="OnRemoveProtect" ToolTip="목록에서 고른 보호 영역 삭제">
                                             <Path Style="{StaticResource Icon}" Data="{StaticResource I.Minus}" />
                                         </Button>
                                     </Grid>
                                     <Border Style="{StaticResource Hairline}" />
                                     <CheckBox x:Name="ProtectEnableCheck" Style="{StaticResource Switch}" Content="편집에서 제외" IsChecked="True" Click="OnProtectToggle" />
-                                    <CheckBox x:Name="ProtectShowCheck" Style="{StaticResource Switch}" Content="화면에 표시" IsChecked="True" Margin="0,6,0,0" Click="OnProtectToggle" />
+                                    <CheckBox x:Name="ProtectShowCheck" Style="{StaticResource Switch}" Content="화면에 표시" IsChecked="True" Margin="0,8,0,0" Click="OnProtectToggle" />
                                 </StackPanel>
                             </Border>
 
@@ -444,12 +494,12 @@
                             <StackPanel x:Name="RefEmptyPanel" Margin="16,48,16,0">
                                 <Border Style="{StaticResource EmptyIcon}">
                                     <Path Style="{StaticResource Icon}" Data="{StaticResource I.Layers}" Stretch="Uniform" Width="26" Height="26"
-                                          Stroke="{StaticResource AccentBrush}" />
+                                          Stroke="{DynamicResource AccentBrush}" />
                                 </Border>
                                 <TextBlock Style="{StaticResource EmptyTitle}" Text="기준 맵과 비교" />
                                 <TextBlock Style="{StaticResource EmptyBody}" Text="업데이트 전 맵을 열면 달라진 곳을 찾아&#x0a;단계별로 보정할 수 있어요." />
                                 <Button Style="{StaticResource PrimaryButton}" Content="기준 맵 열기" Click="OnOpenReference"
-                                        HorizontalAlignment="Center" Padding="20,0" Height="32" Margin="0,18,0,0" />
+                                        HorizontalAlignment="Center" Padding="20,0" Height="32" Margin="0,16,0,0" />
                             </StackPanel>
 
                             <StackPanel x:Name="RefStepsPanel" Visibility="Collapsed">
@@ -462,8 +512,8 @@
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <Border Style="{StaticResource StepBadge}" Background="{StaticResource GreenBrush}">
-                                                <TextBlock Style="{StaticResource StepNumber}" Text="✓" Foreground="#FFFFFF" />
+                                            <Border Style="{StaticResource StepBadge}" Background="{DynamicResource SuccessBrush}">
+                                                <TextBlock Style="{StaticResource StepNumber}" Text="✓" Foreground="{DynamicResource OnAccentBrush}" />
                                             </Border>
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                 <TextBlock Style="{StaticResource CardTitle}" Text="기준 맵" />
@@ -485,27 +535,27 @@
                                                              ToolTip="기준 맵 장애물을 청록색으로 겹쳐 표시" />
                                             </UniformGrid>
                                         </Border>
-                                        <UniformGrid Columns="3" Margin="2,12,0,0">
+                                        <UniformGrid Columns="3" Margin="0,12,0,0">
                                             <StackPanel ToolTip="새로 생긴 장애물">
                                                 <StackPanel Orientation="Horizontal">
-                                                    <Ellipse Width="8" Height="8" Fill="{StaticResource DiffAddedBrush}" VerticalAlignment="Center" />
-                                                    <TextBlock Text="추가" Style="{StaticResource Caption}" Margin="5,0,0,0" />
+                                                    <Ellipse Width="8" Height="8" Fill="{DynamicResource DiffAddedBrush}" VerticalAlignment="Center" />
+                                                    <TextBlock Text="추가" Style="{StaticResource Caption}" Margin="4,0,0,0" />
                                                 </StackPanel>
-                                                <TextBlock x:Name="DiffAddedText" Text="0" FontWeight="SemiBold" Margin="0,2,0,0" />
+                                                <TextBlock x:Name="DiffAddedText" Text="0" Style="{StaticResource Numeric}" Margin="0,4,0,0" />
                                             </StackPanel>
                                             <StackPanel ToolTip="사라진 장애물">
                                                 <StackPanel Orientation="Horizontal">
-                                                    <Ellipse Width="8" Height="8" Fill="{StaticResource DiffRemovedBrush}" VerticalAlignment="Center" />
-                                                    <TextBlock Text="삭제" Style="{StaticResource Caption}" Margin="5,0,0,0" />
+                                                    <Ellipse Width="8" Height="8" Fill="{DynamicResource DiffRemovedBrush}" VerticalAlignment="Center" />
+                                                    <TextBlock Text="삭제" Style="{StaticResource Caption}" Margin="4,0,0,0" />
                                                 </StackPanel>
-                                                <TextBlock x:Name="DiffRemovedText" Text="0" FontWeight="SemiBold" Margin="0,2,0,0" />
+                                                <TextBlock x:Name="DiffRemovedText" Text="0" Style="{StaticResource Numeric}" Margin="0,4,0,0" />
                                             </StackPanel>
                                             <StackPanel ToolTip="장애물 여부는 같고 값만 바뀐 픽셀">
                                                 <StackPanel Orientation="Horizontal">
-                                                    <Ellipse Width="8" Height="8" Fill="{StaticResource DiffOtherBrush}" VerticalAlignment="Center" />
-                                                    <TextBlock Text="기타" Style="{StaticResource Caption}" Margin="5,0,0,0" />
+                                                    <Ellipse Width="8" Height="8" Fill="{DynamicResource DiffOtherBrush}" VerticalAlignment="Center" />
+                                                    <TextBlock Text="기타" Style="{StaticResource Caption}" Margin="4,0,0,0" />
                                                 </StackPanel>
-                                                <TextBlock x:Name="DiffOtherText" Text="0" FontWeight="SemiBold" Margin="0,2,0,0" />
+                                                <TextBlock x:Name="DiffOtherText" Text="0" Style="{StaticResource Numeric}" Margin="0,4,0,0" />
                                             </StackPanel>
                                         </UniformGrid>
                                     </StackPanel>
@@ -523,7 +573,7 @@
                                                             ToolTip="이번에 실제로 다시 스캔한 범위입니다.&#x0a;사각형(M)이나 폴리곤(P)으로 선택한 뒤 추가하세요. 여러 개 가능.&#x0a;지정하지 않으면 3~5단계는 맵 전체가 대상입니다." />
                                         </StackPanel>
                                         <TextBlock x:Name="UpdateAreaText" Style="{StaticResource Caption}" Margin="32,4,0,0" />
-                                        <Grid Margin="32,10,0,0">
+                                        <Grid Margin="32,12,0,0">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
@@ -535,11 +585,11 @@
                                                     <TextBlock Text="선택 영역 추가" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Grid.Column="1" Style="{StaticResource SmallIconButton}" Width="28" Height="28" Margin="6,0,0,0"
+                                            <Button Grid.Column="1" Style="{StaticResource SmallIconButton}" Width="32" Height="32" Margin="8,0,0,0"
                                                     Click="OnRemoveLastUpdateArea" ToolTip="마지막 영역 빼기">
                                                 <Path Style="{StaticResource Icon}" Data="{StaticResource I.Undo}" />
                                             </Button>
-                                            <Button Grid.Column="2" Style="{StaticResource SmallIconButton}" Width="28" Height="28"
+                                            <Button Grid.Column="2" Style="{StaticResource SmallIconButton}" Width="32" Height="32"
                                                     Click="OnClearUpdateAreas" ToolTip="모두 지우기">
                                                 <Path Style="{StaticResource Icon}" Data="{StaticResource I.Trash}" />
                                             </Button>
@@ -559,7 +609,7 @@
                                                             ToolTip="업데이트 영역 밖에서 기준 맵과 달라진 픽셀을 기준 맵 값으로 되돌립니다." />
                                         </StackPanel>
                                         <TextBlock x:Name="OutsideText" Style="{StaticResource Caption}" Margin="32,4,0,0" />
-                                        <Button x:Name="RevertOutsideButton" Margin="32,10,0,0" Click="OnRevertOutside" IsEnabled="False">
+                                        <Button x:Name="RevertOutsideButton" Margin="32,12,0,0" Click="OnRevertOutside" IsEnabled="False">
                                             <StackPanel Orientation="Horizontal">
                                                 <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Restore}" />
                                                 <TextBlock Text="기준 맵 값으로 되돌리기" />
@@ -579,15 +629,15 @@
                                             <ContentControl Style="{StaticResource InfoTip}"
                                                             ToolTip="업데이트분이 일정하게 몇 px 밀려 있으면 업데이트 당시 위치 인식이 틀어진 것입니다.&#x0a;이동은 정수 px만 적용하며, 회전이 크면 편집보다 재업데이트를 권장합니다." />
                                         </StackPanel>
-                                        <StackPanel Margin="32,10,0,0">
+                                        <StackPanel Margin="32,12,0,0">
                                             <Button Click="OnEstimateOffset">
                                                 <StackPanel Orientation="Horizontal">
                                                     <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Target}" />
                                                     <TextBlock Text="어긋남 추정" />
                                                 </StackPanel>
                                             </Button>
-                                            <TextBlock x:Name="OffsetText" Style="{StaticResource Caption}" Margin="0,8,0,0" LineHeight="17" />
-                                            <Grid Margin="0,10,0,0">
+                                            <TextBlock x:Name="OffsetText" Style="{StaticResource Caption}" Margin="0,8,0,0" LineHeight="18" />
+                                            <Grid Margin="0,12,0,0">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
@@ -597,9 +647,9 @@
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
                                                 <TextBlock Text="이동" Style="{StaticResource RowLabel}" />
-                                                <TextBlock Grid.Column="1" Text="x" Style="{StaticResource Unit}" Margin="0,0,5,0" />
+                                                <TextBlock Grid.Column="1" Text="x" Style="{StaticResource Unit}" Margin="0,0,4,0" />
                                                 <TextBox x:Name="RealignDxBox" Grid.Column="2" Style="{StaticResource NumberBox}" Width="48" Text="0" />
-                                                <TextBlock Grid.Column="3" Text="y" Style="{StaticResource Unit}" Margin="10,0,5,0" />
+                                                <TextBlock Grid.Column="3" Text="y" Style="{StaticResource Unit}" Margin="12,0,4,0" />
                                                 <TextBox x:Name="RealignDyBox" Grid.Column="4" Style="{StaticResource NumberBox}" Width="48" Text="0" />
                                                 <TextBlock Grid.Column="5" Text="px" Style="{StaticResource Unit}" />
                                             </Grid>
@@ -611,7 +661,7 @@
                                                     <TextBlock Text="옮겨서 합치기" />
                                                 </StackPanel>
                                             </Button>
-                                            <Expander Style="{StaticResource Disclosure}" Header="옵션" Margin="0,10,0,0">
+                                            <Expander Style="{StaticResource Disclosure}" Header="옵션" Margin="0,12,0,0">
                                                 <StackPanel>
                                                     <Grid Style="{StaticResource OptionRow}">
                                                         <Grid.ColumnDefinitions>
@@ -650,15 +700,22 @@
                                             <ContentControl Style="{StaticResource InfoTip}"
                                                             ToolTip="새로 생긴 장애물 중 기존 벽 바로 옆에 붙은 덩어리입니다.&#x0a;기존 벽을 남기고 새 쪽을 기준 맵 값으로 되돌립니다.&#x0a;벽 옆에 새로 설치한 설비도 잡히니 확인 후 복원하세요." />
                                         </StackPanel>
-                                        <StackPanel Margin="32,10,0,0">
+                                        <StackPanel Margin="32,12,0,0">
                                             <Button Click="OnDetectDuplicates">
                                                 <StackPanel Orientation="Horizontal">
                                                     <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Search}" />
                                                     <TextBlock Text="후보 찾기" />
                                                 </StackPanel>
                                             </Button>
-                                            <StackPanel x:Name="DupResults" Visibility="Collapsed" Margin="0,10,0,0">
-                                                <Grid Margin="8,0,0,6">
+                                            <Border x:Name="DupEmpty" Style="{StaticResource EmptyResult}">
+                                                <StackPanel>
+                                                    <TextBlock Text="이중 벽 후보가 없습니다" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                    <TextBlock x:Name="DupEmptyText" Style="{StaticResource Caption}" Margin="0,4,0,0" LineHeight="18" />
+                                                    <Button Style="{StaticResource LinkButton}" Content="옵션 열기 ›" Margin="0,8,0,0" HorizontalAlignment="Left" Click="OnOpenDupOptions" />
+                                                </StackPanel>
+                                            </Border>
+                                            <StackPanel x:Name="DupResults" Visibility="Collapsed" Margin="0,12,0,0">
+                                                <Grid Margin="8,0,0,8">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto" />
                                                         <ColumnDefinition Width="*" />
@@ -675,7 +732,7 @@
                                                     </StackPanel>
                                                 </Button>
                                             </StackPanel>
-                                            <Expander Style="{StaticResource Disclosure}" Header="옵션" Margin="0,10,0,0">
+                                            <Expander x:Name="DupOptions" Style="{StaticResource Disclosure}" Header="옵션" Margin="0,12,0,0">
                                                 <StackPanel>
                                                     <Grid Style="{StaticResource OptionRow}">
                                                         <Grid.ColumnDefinitions>
@@ -725,15 +782,15 @@
                                             <ContentControl Style="{StaticResource InfoTip}"
                                                             ToolTip="남은 변경을 하나씩 확인합니다. 목록을 누르면 그 위치로 이동합니다.&#x0a;부분 수정은 복원 브러시(H)를 쓰세요." />
                                         </StackPanel>
-                                        <StackPanel Margin="32,10,0,0">
+                                        <StackPanel Margin="32,12,0,0">
                                             <UniformGrid Columns="2">
-                                                <Button Click="OnFindDiffRegions" Margin="0,0,3,0">
+                                                <Button Click="OnFindDiffRegions" Margin="0,0,4,0">
                                                     <StackPanel Orientation="Horizontal">
                                                         <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Search}" />
                                                         <TextBlock Text="변경 찾기" />
                                                     </StackPanel>
                                                 </Button>
-                                                <Button x:Name="RestoreSelectionButton" Click="OnRestoreSelection" Margin="3,0,0,0" IsEnabled="False"
+                                                <Button x:Name="RestoreSelectionButton" Click="OnRestoreSelection" Margin="4,0,0,0" IsEnabled="False"
                                                         ToolTip="선택 영역을 기준 맵 값으로 되돌립니다.">
                                                     <StackPanel Orientation="Horizontal">
                                                         <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Restore}" />
@@ -741,17 +798,23 @@
                                                     </StackPanel>
                                                 </Button>
                                             </UniformGrid>
+                                            <Border x:Name="DiffEmpty" Style="{StaticResource EmptyResult}">
+                                                <StackPanel>
+                                                    <TextBlock Text="기준 맵과 다른 곳이 없습니다" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                    <TextBlock x:Name="DiffEmptyText" Style="{StaticResource Caption}" Margin="0,4,0,0" LineHeight="18" />
+                                                </StackPanel>
+                                            </Border>
                                             <ListBox x:Name="DiffRegionList" MaxHeight="180" Margin="0,8,0,0" Visibility="Collapsed"
                                                      ItemTemplate="{StaticResource RegionItemTemplate}" SelectionChanged="OnDiffRegionSelected" />
                                         </StackPanel>
                                     </StackPanel>
                                 </Border>
 
-                                <Button Style="{StaticResource LinkButton}" Click="OnGoCleanupTab" HorizontalAlignment="Center" Margin="0,2,0,8"
+                                <Button Style="{StaticResource LinkButton}" Click="OnGoCleanupTab" HorizontalAlignment="Center" Margin="0,4,0,8"
                                         ToolTip="캐스터 등 노이즈를 정리한 뒤 저장하세요.&#x0a;저장 확인창에서 기준 맵 대비 변경량을 한 번 더 보여줍니다.">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="마무리: 노이즈 정리" VerticalAlignment="Center" />
-                                        <Path Style="{StaticResource Icon}" Data="{StaticResource I.Arrow}" Stretch="Uniform" Width="12" Height="12" Margin="5,0,0,0" />
+                                        <Path Style="{StaticResource Icon}" Data="{StaticResource I.Arrow}" Stretch="Uniform" Width="12" Height="12" Margin="4,0,0,0" />
                                     </StackPanel>
                                 </Button>
                             </StackPanel>
@@ -766,20 +829,20 @@
                             <StackPanel x:Name="SecondEmptyPanel" Margin="16,48,16,0">
                                 <Border Style="{StaticResource EmptyIcon}">
                                     <Path Style="{StaticResource Icon}" Data="{StaticResource I.Merge}" Stretch="Uniform" Width="26" Height="26"
-                                          Stroke="{StaticResource AccentBrush}" />
+                                          Stroke="{DynamicResource AccentBrush}" />
                                 </Border>
                                 <TextBlock Style="{StaticResource EmptyTitle}" Text="다른 맵과 맞추기" />
                                 <TextBlock Style="{StaticResource EmptyBody}"
                                            Text="나눠 그린 맵을 이어 붙여 큰 맵을 만들거나&#x0a;새로 그린 일부 맵을 현재 맵과 비교해요.&#x0a;크기 · origin이 달라도 위치를 맞춰 줍니다." />
                                 <Button Style="{StaticResource PrimaryButton}" Content="맞출 맵 열기" Click="OnOpenSecond"
-                                        HorizontalAlignment="Center" Padding="20,0" Height="32" Margin="0,18,0,0" />
-                                <TextBlock Style="{StaticResource EmptyBody}" Margin="0,14,0,0" FontSize="11.5"
+                                        HorizontalAlignment="Center" Padding="20,0" Height="32" Margin="0,16,0,0" />
+                                <TextBlock Style="{StaticResource EmptyBody}" Margin="0,16,0,0"
                                            Text="기존 맵을 갱신할 때는 기존(큰) 맵을 현재 맵으로,&#x0a;새로 그린 맵을 맞출 맵으로 여세요." />
                             </StackPanel>
 
                             <StackPanel x:Name="SecondPanel" Visibility="Collapsed">
                                 <!-- 맞출 맵 -->
-                                <Border Style="{StaticResource Card}">
+                                <Border x:Name="SecondFileCard" Style="{StaticResource Card}">
                                     <StackPanel>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -787,12 +850,12 @@
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <Border Width="34" Height="34" CornerRadius="8" Background="#FAE8FF" VerticalAlignment="Top">
-                                                <Path Style="{StaticResource Icon}" Data="{StaticResource I.Merge}" Stroke="#C026D3" />
+                                            <Border Width="32" Height="32" CornerRadius="8" Background="{DynamicResource SecondTileBrush}" VerticalAlignment="Top">
+                                                <Path Style="{StaticResource Icon}" Data="{StaticResource I.Merge}" Stroke="{DynamicResource SecondBrush}" />
                                             </Border>
-                                            <StackPanel Grid.Column="1" Margin="10,0,6,0" VerticalAlignment="Center">
+                                            <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
                                                 <TextBlock x:Name="SecondFileText" Style="{StaticResource CardTitle}" TextTrimming="CharacterEllipsis" />
-                                                <TextBlock x:Name="SecondMetaText" Style="{StaticResource Caption}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock x:Name="SecondMetaText" Style="{StaticResource Caption}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
                                             </StackPanel>
                                             <Button Grid.Column="2" Style="{StaticResource SmallIconButton}" Click="OnCloseSecond" VerticalAlignment="Top"
                                                     ToolTip="맞출 맵 닫기">
@@ -811,7 +874,7 @@
                                                              Content="숨기기" Checked="OnSecondViewChanged" ToolTip="외곽선만 표시" />
                                             </UniformGrid>
                                         </Border>
-                                        <Grid Margin="0,10,0,0">
+                                        <Grid Margin="0,12,0,0">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="*" />
@@ -820,12 +883,12 @@
                                             <Slider x:Name="SecondOpacitySlider" Grid.Column="1" Minimum="0.2" Maximum="1" Value="0.85"
                                                     VerticalAlignment="Center" ValueChanged="OnSecondOpacityChanged" />
                                         </Grid>
-                                        <TextBlock x:Name="SecondPoseText" Style="{StaticResource Caption}" Margin="0,8,0,0" />
+                                        <TextBlock x:Name="SecondPoseText" Style="{StaticResource Caption}" Margin="0,8,0,0" FontFamily="{StaticResource MonoFont}" />
                                     </StackPanel>
                                 </Border>
 
                                 <!-- 1. 대략 맞추기 -->
-                                <Border Style="{StaticResource Card}">
+                                <Border x:Name="SecondCard1" Style="{StaticResource Card}">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
                                             <Border Style="{StaticResource StepBadge}">
@@ -835,8 +898,8 @@
                                             <ContentControl Style="{StaticResource InfoTip}"
                                                             ToolTip="맞출 맵 이동 도구(A)로 끌어서 겹치세요. 수십 px 정도 어긋나도 자동 정렬이 맞춥니다.&#x0a;드래그 = 이동, Shift+드래그 = 회전 (Ctrl 함께 = 1° 단위)&#x0a;방향키 1px (Shift 10px), 쉼표 · 마침표 0.1° (Shift 1°)&#x0a;회전은 화면에 보이는 부분의 가운데를 중심으로 돕니다." />
                                         </StackPanel>
-                                        <UniformGrid Columns="3" Margin="32,10,0,0">
-                                            <Button Margin="0,0,3,0" Click="OnSecondRotateLeft" ToolTip="왼쪽으로 90° 회전">
+                                        <UniformGrid Columns="3" Margin="32,12,0,0">
+                                            <Button Margin="0,0,4,0" Padding="4,0" Click="OnSecondRotateLeft" ToolTip="왼쪽으로 90° 회전">
                                                 <StackPanel Orientation="Horizontal">
                                                     <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Rotate}" RenderTransformOrigin="0.5,0.5">
                                                         <Path.RenderTransform>
@@ -846,27 +909,27 @@
                                                     <TextBlock Text="90°" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Margin="3,0" Click="OnSecondRotateRight" ToolTip="오른쪽으로 90° 회전">
+                                            <Button Margin="4,0" Padding="4,0" Click="OnSecondRotateRight" ToolTip="오른쪽으로 90° 회전">
                                                 <StackPanel Orientation="Horizontal">
                                                     <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Rotate}" />
                                                     <TextBlock Text="90°" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button Margin="3,0,0,0" Click="OnSecondAxisSnap" Content="벽 방향"
+                                            <Button Margin="4,0,0,0" Padding="4,0" Click="OnSecondAxisSnap" Content="벽 방향"
                                                     ToolTip="두 맵의 벽 방향이 평행해지도록 회전합니다 (±45° 이내).&#x0a;90° 단위 방향은 회전 버튼으로 맞추세요." />
                                         </UniformGrid>
-                                        <UniformGrid Columns="3" Margin="32,6,0,0">
-                                            <Button Margin="0,0,3,0" Click="OnSecondPairStart" Content="2점"
+                                        <UniformGrid Columns="3" Margin="32,8,0,0">
+                                            <Button Margin="0,0,4,0" Padding="4,0" Click="OnSecondPairStart" Content="2점"
                                                     ToolTip="2점으로 맞추기&#x0a;맞출 맵의 점 A → 현재 맵의 같은 위치 → 맞출 맵의 점 B → 현재 맵의 같은 위치 순서로 클릭.&#x0a;회전이 크게 다를 때 편합니다." />
-                                            <Button Margin="3,0" Click="OnSecondCenter" Content="화면 중앙" ToolTip="맞출 맵을 화면 가운데로 옮깁니다 (각도 유지)." />
-                                            <Button x:Name="SecondYamlButton" Margin="3,0,0,0" Click="OnSecondYaml" Content="yaml 위치"
+                                            <Button Margin="4,0" Padding="4,0" Click="OnSecondCenter" Content="화면 중앙" ToolTip="맞출 맵을 화면 가운데로 옮깁니다 (각도 유지)." />
+                                            <Button x:Name="SecondYamlButton" Margin="4,0,0,0" Padding="4,0" Click="OnSecondYaml" Content="yaml 위치"
                                                     ToolTip="두 yaml origin 기준 위치로 옮깁니다.&#x0a;같은 좌표계(같은 SLAM 세션 · 이어서 그린 맵)일 때만 맞습니다." />
                                         </UniformGrid>
-                                        <TextBlock x:Name="SecondPairText" Style="{StaticResource Caption}" Margin="32,8,0,0" Visibility="Collapsed" LineHeight="17" />
+                                        <TextBlock x:Name="SecondPairText" Style="{StaticResource Caption}" Margin="32,8,0,0" Visibility="Collapsed" LineHeight="18" />
                                         <Button x:Name="SecondUndoPoseButton" Style="{StaticResource LinkButton}" Click="OnSecondUndoPose" HorizontalAlignment="Left"
                                                 Margin="32,8,0,0" IsEnabled="False" ToolTip="맞출 맵 위치를 한 단계 전으로">
                                             <StackPanel Orientation="Horizontal">
-                                                <Path Style="{StaticResource Icon}" Data="{StaticResource I.Undo}" Stretch="Uniform" Width="12" Height="12" Margin="0,0,5,0" />
+                                                <Path Style="{StaticResource Icon}" Data="{StaticResource I.Undo}" Stretch="Uniform" Width="12" Height="12" Margin="0,0,4,0" />
                                                 <TextBlock Text="위치 되돌리기" VerticalAlignment="Center" />
                                             </StackPanel>
                                         </Button>
@@ -884,14 +947,30 @@
                                             <ContentControl Style="{StaticResource InfoTip}"
                                                             ToolTip="지금 위치에서 이동 · 회전을 조금씩 바꿔 가며 겹치는 부분의 벽이 가장 잘 맞는 위치를 찾습니다.&#x0a;현재 맵이 Unknown인 곳은 비교에서 빠지므로, 새로 넓힌 영역이 있어도 됩니다.&#x0a;랙 열처럼 반복되는 구조는 한 칸 옆도 잘 맞을 수 있어 비슷한 후보를 함께 보여줍니다." />
                                         </StackPanel>
-                                        <StackPanel Margin="32,10,0,0">
-                                            <Button Style="{StaticResource PrimaryButton}" Click="OnSecondAutoAlign">
+                                        <StackPanel Margin="32,12,0,0">
+                                            <Button x:Name="SecondAlignButton" Style="{StaticResource PrimaryButton}" Click="OnSecondAutoAlign">
                                                 <StackPanel Orientation="Horizontal">
                                                     <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Target}" />
                                                     <TextBlock Text="자동 정렬" />
                                                 </StackPanel>
                                             </Button>
-                                            <TextBlock x:Name="SecondAlignText" Style="{StaticResource Caption}" Margin="0,8,0,0" LineHeight="17" Visibility="Collapsed" />
+                                            <!-- 진행 중: 단계 · % · 취소 -->
+                                            <Grid x:Name="SecondProgressPanel" Visibility="Collapsed">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <Grid>
+                                                        <TextBlock x:Name="SecondProgressText" Style="{StaticResource Caption}" Text="준비" />
+                                                        <TextBlock x:Name="SecondProgressPercent" Style="{StaticResource Caption}" HorizontalAlignment="Right"
+                                                                   FontFamily="{StaticResource MonoFont}" Text="0 %" />
+                                                    </Grid>
+                                                    <ProgressBar x:Name="SecondProgressBar" Maximum="100" Margin="0,4,0,0" />
+                                                </StackPanel>
+                                                <Button Grid.Column="1" Content="취소" Margin="8,0,0,0" Click="OnCancelBusy" ToolTip="자동 정렬 취소  Esc" />
+                                            </Grid>
+                                            <TextBlock x:Name="SecondAlignText" Style="{StaticResource Caption}" Margin="0,8,0,0" LineHeight="18" Visibility="Collapsed" />
                                             <Button x:Name="SecondAltButton" Margin="0,8,0,0" Click="OnSecondNextCandidate" Visibility="Collapsed"
                                                     ToolTip="점수가 비슷한 다른 위치로 바꿔 봅니다.">
                                                 <StackPanel Orientation="Horizontal">
@@ -899,7 +978,7 @@
                                                     <TextBlock x:Name="SecondAltText" Text="다른 후보" />
                                                 </StackPanel>
                                             </Button>
-                                            <Expander Style="{StaticResource Disclosure}" Header="옵션" Margin="0,10,0,0">
+                                            <Expander Style="{StaticResource Disclosure}" Header="옵션" Margin="0,12,0,0">
                                                 <StackPanel>
                                                     <Grid Style="{StaticResource OptionRow}">
                                                         <Grid.ColumnDefinitions>
@@ -930,7 +1009,7 @@
                                 </Border>
 
                                 <!-- 3. 비교 · 반영 -->
-                                <Border Style="{StaticResource Card}">
+                                <Border x:Name="SecondCard3" Style="{StaticResource Card}">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
                                             <Border Style="{StaticResource StepBadge}">
@@ -940,39 +1019,45 @@
                                             <ContentControl Style="{StaticResource InfoTip}"
                                                             ToolTip="새로 그린 일부 맵으로 기존 맵을 갱신할 때 씁니다.&#x0a;변경 찾기: 새 맵에만 있는 장애물(추가)과 현재 맵에만 있는 장애물(삭제)을 찾습니다.&#x0a;반영: 맞출 맵이 알고 있는 곳(Unknown 제외)을 현재 맵에 덮어씁니다. 선택 영역이 있으면 그 안만.&#x0a;반영 전 맵이 기준 맵이 되어 업데이트 탭에서 이중 벽 정리 등을 이어서 할 수 있습니다." />
                                         </StackPanel>
-                                        <StackPanel Margin="32,10,0,0">
+                                        <StackPanel Margin="32,12,0,0">
                                             <Button Click="OnSecondFindDiff">
                                                 <StackPanel Orientation="Horizontal">
                                                     <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Search}" />
                                                     <TextBlock Text="변경 찾기" />
                                                 </StackPanel>
                                             </Button>
-                                            <UniformGrid x:Name="SecondStatsPanel" Columns="3" Margin="2,10,0,0" Visibility="Collapsed">
+                                            <UniformGrid x:Name="SecondStatsPanel" Columns="3" Margin="0,12,0,0" Visibility="Collapsed">
                                                 <StackPanel ToolTip="새 맵에만 있는 장애물">
                                                     <StackPanel Orientation="Horizontal">
-                                                        <Ellipse Width="8" Height="8" Fill="{StaticResource DiffAddedBrush}" VerticalAlignment="Center" />
-                                                        <TextBlock Text="추가" Style="{StaticResource Caption}" Margin="5,0,0,0" />
+                                                        <Ellipse Width="8" Height="8" Fill="{DynamicResource DiffAddedBrush}" VerticalAlignment="Center" />
+                                                        <TextBlock Text="추가" Style="{StaticResource Caption}" Margin="4,0,0,0" />
                                                     </StackPanel>
-                                                    <TextBlock x:Name="SecondAddedText" Text="0" FontWeight="SemiBold" Margin="0,2,0,0" />
+                                                    <TextBlock x:Name="SecondAddedText" Text="0" Style="{StaticResource Numeric}" Margin="0,4,0,0" />
                                                 </StackPanel>
                                                 <StackPanel ToolTip="현재 맵에만 있는 장애물 (새 맵에서는 비어 있음)">
                                                     <StackPanel Orientation="Horizontal">
-                                                        <Ellipse Width="8" Height="8" Fill="{StaticResource DiffRemovedBrush}" VerticalAlignment="Center" />
-                                                        <TextBlock Text="삭제" Style="{StaticResource Caption}" Margin="5,0,0,0" />
+                                                        <Ellipse Width="8" Height="8" Fill="{DynamicResource DiffRemovedBrush}" VerticalAlignment="Center" />
+                                                        <TextBlock Text="삭제" Style="{StaticResource Caption}" Margin="4,0,0,0" />
                                                     </StackPanel>
-                                                    <TextBlock x:Name="SecondRemovedText" Text="0" FontWeight="SemiBold" Margin="0,2,0,0" />
+                                                    <TextBlock x:Name="SecondRemovedText" Text="0" Style="{StaticResource Numeric}" Margin="0,4,0,0" />
                                                 </StackPanel>
                                                 <StackPanel ToolTip="현재 맵이 모르는(Unknown · 범위 밖) 곳을 새 맵이 채운 픽셀">
                                                     <StackPanel Orientation="Horizontal">
-                                                        <Ellipse Width="8" Height="8" Fill="#D946EF" VerticalAlignment="Center" />
-                                                        <TextBlock Text="새 영역" Style="{StaticResource Caption}" Margin="5,0,0,0" />
+                                                        <Ellipse Width="8" Height="8" Fill="{DynamicResource SecondLayerBrush}" VerticalAlignment="Center" />
+                                                        <TextBlock Text="새 영역" Style="{StaticResource Caption}" Margin="4,0,0,0" />
                                                     </StackPanel>
-                                                    <TextBlock x:Name="SecondNewAreaText" Text="0" FontWeight="SemiBold" Margin="0,2,0,0" />
+                                                    <TextBlock x:Name="SecondNewAreaText" Text="0" Style="{StaticResource Numeric}" Margin="0,4,0,0" />
                                                 </StackPanel>
                                             </UniformGrid>
+                                            <Border x:Name="SecondDiffEmpty" Style="{StaticResource EmptyResult}">
+                                                <StackPanel>
+                                                    <TextBlock Text="추가 · 삭제된 곳이 없습니다" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                    <TextBlock x:Name="SecondDiffEmptyText" Style="{StaticResource Caption}" Margin="0,4,0,0" LineHeight="18" />
+                                                </StackPanel>
+                                            </Border>
                                             <ListBox x:Name="SecondDiffList" MaxHeight="160" Margin="0,8,0,0" Visibility="Collapsed"
                                                      ItemTemplate="{StaticResource RegionItemTemplate}" SelectionChanged="OnSecondDiffSelected" />
-                                            <TextBlock x:Name="SecondOutsideText" Style="{StaticResource Caption}" Margin="0,8,0,0" Foreground="{StaticResource OrangeBrush}"
+                                            <TextBlock x:Name="SecondOutsideText" Style="{StaticResource Caption}" Margin="0,8,0,0" Foreground="{DynamicResource WarningTextBrush}"
                                                        Visibility="Collapsed" />
                                             <Button Margin="0,8,0,0" Click="OnSecondApply"
                                                     ToolTip="맞출 맵 내용을 현재 맵에 덮어씁니다 (현재 맵 크기 · 좌표 유지). 선택 영역이 있으면 그 안만.">
@@ -986,7 +1071,7 @@
                                 </Border>
 
                                 <!-- 4. 합치기 -->
-                                <Border Style="{StaticResource Card}">
+                                <Border x:Name="SecondCard4" Style="{StaticResource Card}">
                                     <StackPanel>
                                         <StackPanel Orientation="Horizontal">
                                             <Border Style="{StaticResource StepBadge}">
@@ -996,26 +1081,26 @@
                                             <ContentControl Style="{StaticResource InfoTip}"
                                                             ToolTip="두 맵을 모두 담는 크기로 새 맵을 만듭니다. 나눠 그린 맵을 이어 붙일 때 씁니다.&#x0a;현재 맵 영역의 월드 좌표는 그대로 두고 yaml origin만 새 크기에 맞게 바꿉니다.&#x0a;맞출 맵의 Unknown은 절대 덮어쓰지 않습니다. 3개 이상은 합친 맵에 다음 맵을 다시 맞추면 됩니다." />
                                         </StackPanel>
-                                        <StackPanel Margin="32,10,0,0">
+                                        <StackPanel Margin="32,12,0,0">
                                             <Border Style="{StaticResource SegmentTrack}">
                                                 <UniformGrid Columns="2">
                                                     <RadioButton x:Name="MergeBaseFirst" Style="{StaticResource SegmentRadio}" GroupName="MergeRule" Content="현재 맵 우선"
-                                                                 IsChecked="True" Padding="2,0" Checked="OnMergeRuleChanged" />
+                                                                 IsChecked="True" Padding="4,0" Checked="OnMergeRuleChanged" />
                                                     <RadioButton x:Name="MergeMovingFirst" Style="{StaticResource SegmentRadio}" GroupName="MergeRule" Content="새 맵 우선"
-                                                                 Padding="2,0" Checked="OnMergeRuleChanged" />
+                                                                 Padding="4,0" Checked="OnMergeRuleChanged" />
                                                     <RadioButton x:Name="MergeUnion" Style="{StaticResource SegmentRadio}" GroupName="MergeRule" Content="장애물 합침"
-                                                                 Padding="2,0" Checked="OnMergeRuleChanged" />
+                                                                 Padding="4,0" Checked="OnMergeRuleChanged" />
                                                     <RadioButton x:Name="MergeRegion" Style="{StaticResource SegmentRadio}" GroupName="MergeRule" Content="선택 영역만 새 맵"
-                                                                 Padding="2,0" Checked="OnMergeRuleChanged" />
+                                                                 Padding="4,0" Checked="OnMergeRuleChanged" />
                                                 </UniformGrid>
                                             </Border>
-                                            <TextBlock x:Name="MergeRuleText" Style="{StaticResource Caption}" Margin="0,8,0,0" LineHeight="17"
+                                            <TextBlock x:Name="MergeRuleText" Style="{StaticResource Caption}" Margin="0,8,0,0" LineHeight="18"
                                                        Text="현재 맵이 Unknown인 곳만 맞출 맵으로 채웁니다. 겹친 곳에 이중 벽이 생기지 않습니다." />
-                                            <TextBlock x:Name="MergeSizeText" Style="{StaticResource Caption}" Margin="0,6,0,0" />
-                                            <Button Style="{StaticResource PrimaryButton}" Margin="0,10,0,0" Click="OnSecondMerge">
+                                            <TextBlock x:Name="MergeSizeText" Style="{StaticResource Caption}" Margin="0,8,0,0" />
+                                            <Button Margin="0,12,0,0" Click="OnSecondMerge" ToolTip="확인창에서 결과 크기 · 영향을 확인한 뒤 합칩니다.">
                                                 <StackPanel Orientation="Horizontal">
                                                     <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Merge}" />
-                                                    <TextBlock Text="합치기" />
+                                                    <TextBlock Text="합치기…" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
@@ -1037,14 +1122,21 @@
                                         <ContentControl Style="{StaticResource InfoTip}"
                                                         ToolTip="캐스터 · 얇은 기둥 같은 작은 장애물 덩어리를 찾습니다.&#x0a;실제 고정 기둥은 위치 인식 기준점일 수 있으니 확인 후 삭제하세요.&#x0a;하나씩 지울 때는 객체 삭제 도구(D)." />
                                     </StackPanel>
-                                    <Button Margin="0,10,0,0" Click="OnDetectNoise">
+                                    <Button Margin="0,12,0,0" Click="OnDetectNoise">
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Search}" />
                                             <TextBlock Text="후보 찾기" />
                                         </StackPanel>
                                     </Button>
-                                    <StackPanel x:Name="NoiseResults" Visibility="Collapsed" Margin="0,10,0,0">
-                                        <Grid Margin="8,0,0,6">
+                                    <Border x:Name="NoiseEmpty" Style="{StaticResource EmptyResult}">
+                                        <StackPanel>
+                                            <TextBlock Text="조건에 맞는 노이즈가 없습니다" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                            <TextBlock x:Name="NoiseEmptyText" Style="{StaticResource Caption}" Margin="0,4,0,0" LineHeight="18" />
+                                            <Button Style="{StaticResource LinkButton}" Content="옵션 열기 ›" Margin="0,8,0,0" HorizontalAlignment="Left" Click="OnOpenNoiseOptions" />
+                                        </StackPanel>
+                                    </Border>
+                                    <StackPanel x:Name="NoiseResults" Visibility="Collapsed" Margin="0,12,0,0">
+                                        <Grid Margin="8,0,0,8">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="*" />
@@ -1061,7 +1153,7 @@
                                             </StackPanel>
                                         </Button>
                                     </StackPanel>
-                                    <Expander Style="{StaticResource Disclosure}" Header="옵션" Margin="0,10,0,0">
+                                    <Expander x:Name="NoiseOptions" Style="{StaticResource Disclosure}" Header="옵션" Margin="0,12,0,0">
                                         <StackPanel>
                                             <Grid Style="{StaticResource OptionRow}">
                                                 <Grid.ColumnDefinitions>
@@ -1107,14 +1199,21 @@
                                         <ContentControl Style="{StaticResource InfoTip}"
                                                         ToolTip="수평 · 수직 벽의 짧은 틈을 찾습니다 (기울어진 맵은 기울기 보정 후).&#x0a;출입구도 후보가 될 수 있어 처음에는 모두 체크 해제 상태입니다." />
                                     </StackPanel>
-                                    <Button Margin="0,10,0,0" Click="OnDetectGaps">
+                                    <Button Margin="0,12,0,0" Click="OnDetectGaps">
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Search}" />
                                             <TextBlock Text="후보 찾기" />
                                         </StackPanel>
                                     </Button>
-                                    <StackPanel x:Name="GapResults" Visibility="Collapsed" Margin="0,10,0,0">
-                                        <Grid Margin="8,0,0,6">
+                                    <Border x:Name="GapEmpty" Style="{StaticResource EmptyResult}">
+                                        <StackPanel>
+                                            <TextBlock Text="이을 틈이 없습니다" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                            <TextBlock x:Name="GapEmptyText" Style="{StaticResource Caption}" Margin="0,4,0,0" LineHeight="18" />
+                                            <Button Style="{StaticResource LinkButton}" Content="옵션 열기 ›" Margin="0,8,0,0" HorizontalAlignment="Left" Click="OnOpenGapOptions" />
+                                        </StackPanel>
+                                    </Border>
+                                    <StackPanel x:Name="GapResults" Visibility="Collapsed" Margin="0,12,0,0">
+                                        <Grid Margin="8,0,0,8">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="*" />
@@ -1133,7 +1232,7 @@
                                             </StackPanel>
                                         </Button>
                                     </StackPanel>
-                                    <Expander Style="{StaticResource Disclosure}" Header="옵션" Margin="0,10,0,0">
+                                    <Expander x:Name="GapOptions" Style="{StaticResource Disclosure}" Header="옵션" Margin="0,12,0,0">
                                         <StackPanel>
                                             <Grid Style="{StaticResource OptionRow}">
                                                 <Grid.ColumnDefinitions>
@@ -1168,7 +1267,7 @@
                                         <ContentControl Style="{StaticResource InfoTip}"
                                                         ToolTip="벽 직선화 도구(W): 벽(들)을 감싸듯 드래그하면 직선으로 다시 그립니다. 영역 안에 벽이 여러 개 있어도 각각 인식해 처리하며, 같은 벽의 끊긴 구간은 이어서 그립니다.&#x0a;기둥 정리 도구(C): 기둥을 클릭하면 감싸는 사각형으로 바꿉니다.&#x0a;맵 주축(벽 방향)과 허용 각도 이내면 정확히 맞춥니다." />
                                     </StackPanel>
-                                    <Grid Margin="0,10,0,0">
+                                    <Grid Margin="0,12,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
@@ -1187,7 +1286,7 @@
                                             <TextBlock Text="선택 영역 직선화" />
                                         </StackPanel>
                                     </Button>
-                                    <Expander Style="{StaticResource Disclosure}" Header="옵션" Margin="0,10,0,0">
+                                    <Expander Style="{StaticResource Disclosure}" Header="옵션" Margin="0,12,0,0">
                                         <StackPanel>
                                             <Grid Style="{StaticResource OptionRow}">
                                                 <Grid.ColumnDefinitions>
@@ -1210,8 +1309,8 @@
                                                 <TextBlock Grid.Column="2" Text="°" Style="{StaticResource OptionUnit}" />
                                             </Grid>
                                             <CheckBox x:Name="WallSnapCheck" Style="{StaticResource Switch}" Content="벽을 주축에 맞춤" IsChecked="True" Margin="0,4,0,0" />
-                                            <CheckBox x:Name="PillarSnapCheck" Style="{StaticResource Switch}" Content="기둥을 주축에 맞춤" IsChecked="True" Margin="0,6,0,0" />
-                                            <CheckBox x:Name="PillarFillCheck" Style="{StaticResource Switch}" Content="기둥 속 채우기" IsChecked="True" Margin="0,6,0,0" />
+                                            <CheckBox x:Name="PillarSnapCheck" Style="{StaticResource Switch}" Content="기둥을 주축에 맞춤" IsChecked="True" Margin="0,8,0,0" />
+                                            <CheckBox x:Name="PillarFillCheck" Style="{StaticResource Switch}" Content="기둥 속 채우기" IsChecked="True" Margin="0,8,0,0" />
                                         </StackPanel>
                                     </Expander>
                                 </StackPanel>
@@ -1225,14 +1324,20 @@
                                         <ContentControl Style="{StaticResource InfoTip}"
                                                         ToolTip="주행 공간(Free가 가장 넓게 이어진 영역)과 이어지지 않은 곳을 찾아 Unknown(0)으로 바꿉니다.&#x0a;닫힌 방 안 (안의 장애물 · 확률값 포함), 창문 너머 산란점, 벽 바깥에 붙은 확률값 등이 대상입니다.&#x0a;주행 공간의 5% 이상인 큰 구역은 실제 주행 구역일 수 있어 체크 해제 상태로 표시합니다." />
                                     </StackPanel>
-                                    <Button Margin="0,10,0,0" Click="OnDetectIsolated">
+                                    <Button Margin="0,12,0,0" Click="OnDetectIsolated">
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Search}" />
                                             <TextBlock Text="후보 찾기" />
                                         </StackPanel>
                                     </Button>
-                                    <StackPanel x:Name="IsoResults" Visibility="Collapsed" Margin="0,10,0,0">
-                                        <Grid Margin="8,0,0,6">
+                                    <Border x:Name="IsoEmpty" Style="{StaticResource EmptyResult}">
+                                        <StackPanel>
+                                            <TextBlock Text="고립 구역이 없습니다" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                            <TextBlock x:Name="IsoEmptyText" Style="{StaticResource Caption}" Margin="0,4,0,0" LineHeight="18" />
+                                        </StackPanel>
+                                    </Border>
+                                    <StackPanel x:Name="IsoResults" Visibility="Collapsed" Margin="0,12,0,0">
+                                        <Grid Margin="8,0,0,8">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="*" />
@@ -1260,7 +1365,7 @@
                                         <ContentControl Style="{StaticResource InfoTip}"
                                                         ToolTip="낮은 값 이하는 Free 또는 Unknown으로, 장애물 기준값 이상은 장애물로 바꾸고 그 사이 값은 유지합니다.&#x0a;위치 인식이 확률값을 쓰는지 확인 전에는 필요한 영역만 선택해 적용하세요." />
                                     </StackPanel>
-                                    <Grid Margin="0,10,0,0">
+                                    <Grid Margin="0,12,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
@@ -1278,7 +1383,7 @@
                                                          Content="Unknown으로" ToolTip="낮은 확률값을 Unknown(0)으로 바꿔 AMR 연산 대상에서 뺍니다." />
                                         </UniformGrid>
                                     </Border>
-                                    <Button Margin="0,10,0,0" Click="OnCleanProbability">
+                                    <Button Margin="0,12,0,0" Click="OnCleanProbability">
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Sparkle}" />
                                             <TextBlock Text="정리" />
@@ -1295,7 +1400,7 @@
                                         <ContentControl Style="{StaticResource InfoTip}"
                                                         ToolTip="건물 외곽을 폴리곤(P)으로 선택한 뒤 실행하면&#x0a;창문 · 출입구 너머로 찍힌 산란점을 Unknown으로 정리합니다." />
                                     </StackPanel>
-                                    <Button x:Name="ClearOutsideButton" Margin="0,10,0,0" Click="OnClearOutside" IsEnabled="False"
+                                    <Button x:Name="ClearOutsideButton" Margin="0,12,0,0" Click="OnClearOutside" IsEnabled="False"
                                             ToolTip="선택 영역 밖을 모두 Unknown(0)으로 바꿉니다.">
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Select}" />
@@ -1310,13 +1415,13 @@
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource CardTitle}" Text="기울기 보정" />
-                                        <Border Background="#FFF4E5" CornerRadius="4" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
-                                            <TextBlock Text="신규 맵 전용" FontSize="11" Foreground="#C77700" />
+                                        <Border Background="{DynamicResource WarningSoftBrush}" CornerRadius="4" Padding="8,0" Height="20" Margin="8,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="신규 맵 전용" FontSize="12" Foreground="{DynamicResource WarningTextBrush}" VerticalAlignment="Center" />
                                         </Border>
                                         <ContentControl Style="{StaticResource InfoTip}"
                                                         ToolTip="맵을 주축 각도만큼 회전해 벽을 수평 · 수직으로 맞춥니다.&#x0a;맵 크기와 좌표계가 바뀌므로 스테이션 · 경로 티칭 전에만 사용하세요.&#x0a;저장 시 yaml origin을 갱신합니다. 기준 맵 비교 중에는 쓸 수 없습니다." />
                                     </StackPanel>
-                                    <Button x:Name="DeskewButton" Margin="0,10,0,0" Click="OnDeskew">
+                                    <Button x:Name="DeskewButton" Margin="0,12,0,0" Click="OnDeskew">
                                         <StackPanel Orientation="Horizontal">
                                             <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Rotate}" />
                                             <TextBlock Text="주축에 맞춰 회전" />
@@ -1334,12 +1439,12 @@
                             <StackPanel x:Name="DxfEmptyPanel" Margin="16,48,16,0">
                                 <Border Style="{StaticResource EmptyIcon}">
                                     <Path Style="{StaticResource Icon}" Data="{StaticResource I.Map}" Stretch="Uniform" Width="26" Height="26"
-                                          Stroke="{StaticResource AccentBrush}" />
+                                          Stroke="{DynamicResource AccentBrush}" />
                                 </Border>
                                 <TextBlock Style="{StaticResource EmptyTitle}" Text="도면 겹쳐보기" />
                                 <TextBlock Style="{StaticResource EmptyBody}" Text="DXF 도면을 맵 위에 겹쳐&#x0a;벽 위치를 비교할 수 있어요." />
                                 <Button Style="{StaticResource PrimaryButton}" Content="도면 열기" Click="OnOpenDxf"
-                                        HorizontalAlignment="Center" Padding="20,0" Height="32" Margin="0,18,0,0" />
+                                        HorizontalAlignment="Center" Padding="20,0" Height="32" Margin="0,16,0,0" />
                             </StackPanel>
 
                             <StackPanel x:Name="DxfContentPanel" Visibility="Collapsed">
@@ -1351,12 +1456,12 @@
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <Border Width="34" Height="34" CornerRadius="8" Background="#FFF1E6" VerticalAlignment="Top">
-                                                <Path Style="{StaticResource Icon}" Data="{StaticResource I.Map}" Stroke="#F97316" />
+                                            <Border Width="32" Height="32" CornerRadius="8" Background="{DynamicResource DxfTileBrush}" VerticalAlignment="Top">
+                                                <Path Style="{StaticResource Icon}" Data="{StaticResource I.Map}" Stroke="{DynamicResource DxfBrush}" />
                                             </Border>
-                                            <StackPanel Grid.Column="1" Margin="10,0,6,0" VerticalAlignment="Center">
+                                            <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
                                                 <TextBlock x:Name="DxfFileText" Style="{StaticResource CardTitle}" TextTrimming="CharacterEllipsis" />
-                                                <TextBlock x:Name="DxfUnitText" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                                                <TextBlock x:Name="DxfUnitText" Style="{StaticResource Caption}" Margin="0,4,0,0" />
                                             </StackPanel>
                                             <Button Grid.Column="2" Style="{StaticResource SmallIconButton}" Click="OnCloseDxf" VerticalAlignment="Top"
                                                     ToolTip="도면 닫기 (맵과의 연결도 해제)">
@@ -1368,7 +1473,7 @@
                                     </StackPanel>
                                 </Border>
 
-                                <Grid Margin="4,4,4,6">
+                                <Grid Margin="4,4,4,8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
@@ -1377,14 +1482,14 @@
                                         <TextBlock Style="{StaticResource SectionHeader}" Text="레이어" />
                                         <ContentControl Style="{StaticResource InfoTip}" ToolTip="벽 · 기둥 레이어만 남기면 비교가 쉽습니다." />
                                     </StackPanel>
-                                    <CheckBox x:Name="DxfLayersAllCheck" Grid.Column="1" Content="모두" FontSize="11.5" Click="OnToggleAllLayers" />
+                                    <CheckBox x:Name="DxfLayersAllCheck" Grid.Column="1" Content="모두" FontSize="12" Click="OnToggleAllLayers" />
                                 </Grid>
                                 <Border Style="{StaticResource Card}" Padding="4">
                                     <ListBox x:Name="DxfLayerList" MaxHeight="220" BorderThickness="0" Padding="0"
                                              ItemTemplate="{StaticResource LayerItemTemplate}" />
                                 </Border>
 
-                                <StackPanel Orientation="Horizontal" Margin="4,4,0,6">
+                                <StackPanel Orientation="Horizontal" Margin="4,4,0,8">
                                     <TextBlock Style="{StaticResource SectionHeader}" Text="위치 맞추기" />
                                     <ContentControl Style="{StaticResource InfoTip}"
                                                     ToolTip="2점 정렬: 도면의 점 A → 맵의 같은 위치 → 도면의 점 B → 맵의 같은 위치 순서로 클릭.&#x0a;도면 점은 가까운 꼭짓점에 붙습니다. 결과는 &lt;맵&gt;.dxf.json에 저장됩니다." />
@@ -1398,7 +1503,7 @@
                                             </StackPanel>
                                         </Button>
                                         <TextBlock x:Name="DxfAlignText" Style="{StaticResource Caption}" Margin="0,8,0,0" Visibility="Collapsed" />
-                                        <Button Margin="0,6,0,0" Click="OnDxfFit">
+                                        <Button Margin="0,8,0,0" Click="OnDxfFit">
                                             <StackPanel Orientation="Horizontal">
                                                 <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Fit}" />
                                                 <TextBlock Text="맵 중앙에 배치" />
@@ -1407,7 +1512,7 @@
                                         <Border Style="{StaticResource Hairline}" />
                                         <CheckBox x:Name="DxfScaleLockCheck" Style="{StaticResource Switch}" Content="축척 고정" IsChecked="True"
                                                   ToolTip="축척을 '도면 단위 ÷ 맵 해상도'로 고정하고 이동 · 회전만 맞춥니다." />
-                                        <Expander Style="{StaticResource Disclosure}" Header="직접 입력" Margin="0,10,0,0">
+                                        <Expander Style="{StaticResource Disclosure}" Header="직접 입력" Margin="0,12,0,0">
                                             <StackPanel>
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
@@ -1429,7 +1534,7 @@
                                                     <TextBlock Grid.Row="1" Grid.Column="2" Text="축척" Style="{StaticResource RowLabel}" Margin="12,8,8,0" />
                                                     <TextBox x:Name="DxfScaleBox" Grid.Row="1" Grid.Column="3" TextAlignment="Right" Text="1" Margin="0,8,0,0" ToolTip="도면 1단위당 px" />
                                                 </Grid>
-                                                <Button Content="적용" Margin="0,10,0,0" Click="OnDxfApply" />
+                                                <Button Content="적용" Margin="0,12,0,0" Click="OnDxfApply" />
                                             </StackPanel>
                                         </Expander>
                                     </StackPanel>
@@ -1442,16 +1547,16 @@
         </Border>
 
         <!-- ═════════ 맵 ═════════ -->
-        <Grid Background="{StaticResource CanvasBrush}">
+        <Grid Background="{DynamicResource CanvasBrush}">
             <ctl:MapView x:Name="MapViewer" />
             <StackPanel x:Name="EmptyState" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Path Data="{StaticResource I.Map}" Stretch="Uniform" Width="56" Height="56" Stroke="#8E8E93" StrokeThickness="1.5"
+                <Path Data="{StaticResource I.Map}" Stretch="Uniform" Width="56" Height="56" Stroke="{DynamicResource CanvasSecondaryBrush}" StrokeThickness="1.5"
                       StrokeLineJoin="Round" HorizontalAlignment="Center" />
-                <TextBlock Text="맵을 열어 시작하세요" Foreground="#F2F2F7" FontSize="17" FontWeight="SemiBold"
-                           HorizontalAlignment="Center" Margin="0,18,0,6" />
-                <TextBlock Text="PGM 파일을 이 창에 끌어놓거나 Ctrl+O" Foreground="#8E8E93" FontSize="12.5" HorizontalAlignment="Center" />
+                <TextBlock Text="맵을 열어 시작하세요" Foreground="{DynamicResource CanvasLabelBrush}" FontSize="18" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" Margin="0,16,0,8" />
+                <TextBlock Text="PGM 파일을 이 창에 끌어놓거나 Ctrl+O" Foreground="{DynamicResource CanvasSecondaryBrush}" FontSize="14" HorizontalAlignment="Center" />
                 <Button Style="{StaticResource PrimaryButton}" Content="맵 열기" Click="OnOpen" HorizontalAlignment="Center"
-                        Padding="22,0" Height="32" Margin="0,20,0,0" />
+                        Padding="24,0" Height="32" Margin="0,24,0,0" />
             </StackPanel>
         </Grid>
     </DockPanel>

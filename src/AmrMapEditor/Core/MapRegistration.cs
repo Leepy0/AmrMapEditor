@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace AmrMapEditor.Core;
 
@@ -66,6 +67,9 @@ public sealed class AlignResult
     /// <summary>점수가 비슷한 다른 후보 (반복 구조에서 한 칸 옆 등). 비어 있으면 뚜렷한 정답 하나</summary>
     public IReadOnlyList<MapPose> Alternatives { get; init; } = Array.Empty<MapPose>();
 }
+
+/// <summary>자동 정렬 진행 상황 (Stage 1 준비 · 2 거친 탐색 · 3 세밀 탐색, Percent 0~100)</summary>
+public readonly record struct AlignProgress(int Stage, double Percent);
 
 /// <summary>맞출 맵과 현재 맵 비교 결과 (맞출 맵 픽셀 기준)</summary>
 public sealed class AlignDiff
@@ -301,8 +305,10 @@ public static class MapRegistration
     /// - 반복 구조(랙 열 등)처럼 점수가 거의 같은 후보가 여럿이면 대략 맞춘 위치에 가까운 쪽을 고르고 나머지는 Alternatives로
     /// 맞출 맵 장애물이 부족하거나 겹치는 범위가 없으면 null
     /// </summary>
-    public static AlignResult? Refine(MapImage baseMap, MapImage moving, byte thr, MapPose start, int radius, double angleRange)
+    public static AlignResult? Refine(MapImage baseMap, MapImage moving, byte thr, MapPose start, int radius, double angleRange,
+                                      IProgress<AlignProgress>? progress = null, CancellationToken ct = default)
     {
+        progress?.Report(new AlignProgress(1, 0));
         int mw = moving.Width, mh = moving.Height, bw = baseMap.Width, bh = baseMap.Height;
         byte[] md = moving.Data, bd = baseMap.Data;
 
@@ -429,6 +435,8 @@ public static class MapRegistration
         }
 
         // 3) 거친 탐색: 두 기준(시작 자세 고정 집합 / 위치마다 겹친 점)에서 후보를 고루
+        ct.ThrowIfCancellationRequested();
+        progress?.Report(new AlignProgress(2, 10));
         int tStep = Math.Max(1, radius / 10);
         double aStep = angleRange > 0 ? Math.Max(0.25, angleRange / 16) : 1;
         var byFixed = new List<(double Score, double Ang, int Dx, int Dy)>();
@@ -440,6 +448,8 @@ public static class MapRegistration
             float[] lut = Kernel(Math.Max(2, tStep * 0.9));
             for (double a = -angleRange; a <= angleRange + 1e-9; a += aStep)
             {
+                ct.ThrowIfCancellationRequested();
+                if (angleRange > 0) progress?.Report(new AlignProgress(2, 10 + 35 * (a + angleRange) / (2 * angleRange)));
                 Rotate(a);
                 for (int dy = -radius; dy <= radius; dy += tStep)
                 for (int dx = -radius; dx <= radius; dx += tStep)
@@ -471,8 +481,11 @@ public static class MapRegistration
         var refined = new List<(double Ang, double Dx, double Dy)>();
         {
             float[] lut2 = Kernel(1.5), lut3 = Kernel(1.0);
-            foreach (var seed in seeds)
+            for (int si = 0; si < seeds.Count; si++)
             {
+                var seed = seeds[si];
+                ct.ThrowIfCancellationRequested();
+                progress?.Report(new AlignProgress(3, 45 + 50.0 * si / seeds.Count));
                 Rotate(seed.Ang);
                 int[] set = OverlapSet(seed.Dx, seed.Dy, 8000);
                 if (set.Length < 20) continue;
@@ -508,6 +521,8 @@ public static class MapRegistration
             }
         }
         if (refined.Count == 0) return null;
+        ct.ThrowIfCancellationRequested();
+        progress?.Report(new AlignProgress(3, 95));
 
         // 5) 후보 최종 비교: 그 위치에서 겹친 점당 평균 (양방향 경계 일치 − Free 충돌)
         float[] k15 = Kernel(1.5);

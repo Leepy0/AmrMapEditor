@@ -5,6 +5,8 @@ namespace AmrMapEditor;
 
 public partial class App : Application
 {
+    private bool _reporting;   // 오류 창을 띄우는 중 또 예외가 나면 기본 메시지 상자로
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -14,8 +16,26 @@ public partial class App : Application
     // 예외로 프로그램이 종료되어 편집 내용을 잃지 않도록 표시 후 계속 진행
     private void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        MessageBox.Show($"예기치 않은 오류가 발생했습니다.\n\n{e.Exception.Message}", "오류",
-            MessageBoxButton.OK, MessageBoxImage.Error);
         e.Handled = true;
+        string log = ErrorReport.Write(e.Exception, "처리되지 않은 예외");
+        if (_reporting)
+        {
+            MessageBox.Show($"예상하지 못한 오류가 생겼습니다.\n\n{e.Exception.Message}\n\n로그: {log}", "AMR Map Editor",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+        _reporting = true;
+        try
+        {
+            MessageDialog.Show(Current.MainWindow, DialogKind.Error, "작업 중 예상하지 못한 오류가 생겼습니다",
+                "프로그램은 계속 쓸 수 있습니다. 방금 한 작업이 반영되지 않았을 수 있으니 맵을 확인한 뒤 저장하세요.",
+                new[] { ("해결", "같은 작업에서 반복되면 '자세히'의 로그 파일을 전달해 주세요.") },
+                $"{e.Exception.GetType().Name}: {e.Exception.Message}\n\n로그: {log}",
+                new[] { new DialogButton("닫기", Cancel: true) }, 0);
+        }
+        finally
+        {
+            _reporting = false;
+        }
     }
 }

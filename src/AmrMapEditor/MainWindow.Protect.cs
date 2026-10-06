@@ -25,7 +25,8 @@ public partial class MainWindow
             }
             catch (Exception ex)
             {
-                SetStatus($"보호 영역 파일을 읽지 못했습니다: {ex.Message}");
+                ErrorReport.Write(ex, "보호 영역 읽기");
+                SetStatus($"보호 영역 파일을 읽지 못했습니다 · {ErrorReport.Describe(ex).Cause}");
             }
         }
         ApplyProtect();
@@ -41,7 +42,8 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
-            SetStatus($"보호 영역 저장 실패: {ex.Message}");
+            ErrorReport.Write(ex, "보호 영역 저장");
+            SetStatus($"보호 영역을 저장하지 못했습니다 · {ErrorReport.Describe(ex).Cause}");
         }
     }
 
@@ -53,6 +55,7 @@ public partial class MainWindow
         if (_tracker != null) _tracker.Protect = ProtectEnableCheck.IsChecked == true ? _protectMask : null;
         ProtectList.Visibility = _protect.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         RefreshRegions();
+        RefreshStatusChips();
     }
 
     private void OnAddProtect(object sender, RoutedEventArgs e)

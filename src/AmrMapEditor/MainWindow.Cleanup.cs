@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using AmrMapEditor.Controls;
@@ -14,8 +15,8 @@ namespace AmrMapEditor;
 /// <summary>맵 정리: 노이즈, 벽 직선화, 기둥, 벽 끊김, 고립 구역, 확률값, 외곽, 기울기 보정</summary>
 public partial class MainWindow
 {
-    private const int BlobPickWarnArea = 500;      // 객체 삭제 시 확인 (벽 오삭제 방지)
-    private const int PillarWarnArea = 20000;      // 기둥 정리 시 확인
+    private const int BlobPickWarnArea = 500;      // 객체 삭제 후 범위 강조 (벽 오삭제 확인용)
+    private const int PillarWarnArea = 20000;      // 기둥 정리 후 범위 강조
 
     private double? _axis;   // 맵 주축 각도 (캐시)
 
@@ -60,9 +61,36 @@ public partial class MainWindow
         _bulk = false;
         _dupDetected = false;
         _focusMarker = null;
+        NoiseEmpty.Visibility = GapEmpty.Visibility = DupEmpty.Visibility = IsoEmpty.Visibility = Visibility.Collapsed;
         RefreshMarkers();
         RefreshUpdateGuide();
     }
+
+    /// <summary>후보가 0개일 때: 무엇을 기준으로 찾았는지와 다음 행동을 결과 자리에 표시</summary>
+    private static void ShowEmpty(Border empty, TextBlock text, string message)
+    {
+        text.Text = message;
+        empty.Visibility = Visibility.Visible;
+    }
+
+    private static string ExcludedNote(int excluded) => excluded > 0 ? $" (보호 영역에 닿은 {excluded}개 제외)" : "";
+
+    /// <summary>옵션 펼치고 첫 입력칸으로 이동</summary>
+    private static void OpenOptions(Expander options, TextBox first)
+    {
+        options.IsExpanded = true;
+        options.BringIntoView();
+        // 펼친 뒤 레이아웃이 끝나야 포커스가 들어감
+        first.Dispatcher.InvokeAsync(() =>
+        {
+            first.Focus();
+            first.SelectAll();
+        }, System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private void OnOpenNoiseOptions(object sender, RoutedEventArgs e) => OpenOptions(NoiseOptions, NoiseMaxAreaBox);
+
+    private void OnOpenGapOptions(object sender, RoutedEventArgs e) => OpenOptions(GapOptions, GapMaxBox);
 
     /// <summary>후보를 찾은 뒤: 결과가 있으면 맵에서 바로 클릭해 체크할 수 있도록 후보 선택 도구로 전환</summary>
     private void AfterDetect(int count)
@@ -190,6 +218,10 @@ public partial class MainWindow
         _bulk = false;
         RefreshMarkers();
         AfterDetect(blobs.Count);
+        if (blobs.Count == 0)
+            ShowEmpty(NoiseEmpty, NoiseEmptyText,
+                $"{ScopeName()}에서 면적 {maxArea:N0} px · 크기 {maxSide:N0} px 이하인 덩어리를 찾지 못했습니다{ExcludedNote(excluded)}. " +
+                "더 큰 덩어리도 찾으려면 옵션에서 기준을 늘리세요.");
         SetStatus($"노이즈 후보 {blobs.Count:N0}개 · {ScopeName()} ({sw.ElapsedMilliseconds} ms)" + (excluded > 0 ? $" · 보호 영역 {excluded}개 제외" : ""));
     }
 
@@ -219,7 +251,7 @@ public partial class MainWindow
             CommitEdit();
         }
         RemoveItems(_candidates, targets);
-        SetStatus($"노이즈 {targets.Count:N0}개 삭제 ({n:N0} px)" + BlockedNote());
+        SetStatus($"노이즈 {targets.Count:N0}개 삭제 ({n:N0} px)" + BlockedNote(), undo: n > 0);
     }
 
     /// <summary>객체 삭제 도구: 클릭한 덩어리 전체 삭제</summary>
@@ -233,24 +265,23 @@ public partial class MainWindow
             SetStatus($"장애물 픽셀이 아닙니다 ({MapValues.Describe(_map.Get(x, y))}, 장애물 기준값 {_occThreshold} 이상만 대상)");
             return;
         }
-        if (blob.Area > BlobPickWarnArea && !ConfirmLargeBlob(blob, "객체 삭제", "벽체와 연결된 부분일 수 있습니다. 삭제할까요?"))
-            return;
         if (!ReadInt(NoiseExpandBox, 0, 10, "주변 정리", out int expand)) return;
 
         BeginEdit("객체 삭제");
         int n = BlobDetector.Erase(blob, _tracker, _occThreshold, expand);
         CommitEdit();
-        SetStatus($"객체 삭제: {blob.Area:N0} px ({blob.Bounds.Width}×{blob.Bounds.Height}), 변경 {n:N0} px" + BlockedNote());
+        // 확인창 대신 실행 후 범위 표시 + 실행 취소. 큰 덩어리는 벽과 이어졌을 수 있어 범위를 강조
+        bool large = blob.Area > BlobPickWarnArea;
+        MarkAffected(blob.Bounds, large);
+        SetStatus($"객체 삭제: {blob.Area:N0} px ({blob.Bounds.Width}×{blob.Bounds.Height}), 변경 {n:N0} px" +
+                  (large ? " · 큰 덩어리 — 벽과 이어진 부분이면 실행 취소" : "") + BlockedNote(), undo: n > 0);
     }
 
-    private bool ConfirmLargeBlob(Blob blob, string title, string question)
+    /// <summary>방금 바뀐 범위를 포커스 상자로 표시 (큰 범위만)</summary>
+    private void MarkAffected(IntRect bounds, bool show)
     {
-        _focusMarker = new MapMarker(blob.Bounds, MarkerKind.Focus);
+        _focusMarker = show ? new MapMarker(bounds, MarkerKind.Focus) : null;
         RefreshMarkers();
-        bool ok = Confirm($"큰 덩어리입니다. ({blob.Area:N0} px, {blob.Bounds.Width}×{blob.Bounds.Height})\n{question}", title);
-        _focusMarker = null;
-        RefreshMarkers();
-        return ok;
     }
 
     // ───────────── 주축 ─────────────
@@ -315,14 +346,14 @@ public partial class MainWindow
             StraightenResult r = results[0];
             SetStatus($"벽 직선화{(r.SegmentCount > 1 ? $" (꺾인 벽 {r.SegmentCount}구간)" : "")}: " +
                       $"각도 {r.AngleDeg:0.00}°{(r.Snapped ? " (주축 스냅)" : "")}, 두께 {r.Thickness} px, " +
-                      $"길이 {r.LengthPx * _meta.Resolution:0.00} m" + tiltNote + BlockedNote());
+                      $"길이 {r.LengthPx * _meta.Resolution:0.00} m" + tiltNote + BlockedNote(), undo: true);
             return;
         }
         int snapped = results.Count(x => x.Snapped);
         double totalLen = 0;
         foreach (StraightenResult x in results) totalLen += x.LengthPx;
         SetStatus($"벽 직선화: {results.Count}개 벽 인식{(snapped > 0 ? $" (스냅 {snapped}개)" : "")}, " +
-                  $"총 길이 {totalLen * _meta.Resolution:0.00} m" + tiltNote + BlockedNote());
+                  $"총 길이 {totalLen * _meta.Resolution:0.00} m" + tiltNote + BlockedNote(), undo: true);
     }
 
     // ───────────── 기둥 ─────────────
@@ -336,16 +367,16 @@ public partial class MainWindow
             SetStatus($"장애물 픽셀이 아닙니다 ({MapValues.Describe(_map.Get(x, y))})");
             return;
         }
-        if (blob.Area > PillarWarnArea && !ConfirmLargeBlob(blob, "기둥 정리", "벽체와 연결된 덩어리일 수 있습니다. 사각형으로 바꿀까요?"))
-            return;
-
         double? axis = PillarSnapCheck.IsChecked == true ? GetAxis() : null;
         BeginEdit("기둥 정리");
         RectifyResult? r = WallCleanup.Rectify(blob, axis, SnapTol(), PillarFillCheck.IsChecked == true, _tracker);
         CommitEdit();
         if (r == null) return;
         double res = _meta.Resolution;
-        SetStatus($"기둥 정리: {r.WidthPx * res:0.00} × {r.HeightPx * res:0.00} m, 각도 {r.AngleDeg:0.0}°" + BlockedNote());
+        bool large = blob.Area > PillarWarnArea;
+        MarkAffected(blob.Bounds, large);
+        SetStatus($"기둥 정리: {r.WidthPx * res:0.00} × {r.HeightPx * res:0.00} m, 각도 {r.AngleDeg:0.0}°" +
+                  (large ? " · 큰 덩어리 — 벽과 이어진 부분이면 실행 취소" : "") + BlockedNote(), undo: true);
     }
 
     // ───────────── 벽 끊김 ─────────────
@@ -370,6 +401,10 @@ public partial class MainWindow
         _bulk = false;
         RefreshMarkers();
         AfterDetect(gaps.Count);
+        if (gaps.Count == 0)
+            ShowEmpty(GapEmpty, GapEmptyText,
+                $"{ScopeName()}에서 양쪽 벽이 {minRun:N0} px 이상이고 틈이 {maxGap:N0} px 이하인 곳이 없습니다{ExcludedNote(excluded)}. " +
+                (_axis is double ax && Math.Abs(ax) > 0.5 ? $"맵이 {ax:0.0}° 기울어져 있어 기울기 보정 후 다시 찾으면 더 찾을 수 있습니다." : "옵션에서 최대 틈을 늘려 보세요."));
 
         string tilt = _axis is double a && Math.Abs(a) > 0.5 ? $" · 맵이 {a:0.0}° 기울어져 있어 검출이 적을 수 있음" : "";
         SetStatus($"벽 끊김 후보 {gaps.Count:N0}개 · {ScopeName()} (확인 후 체크)" +
@@ -418,7 +453,7 @@ public partial class MainWindow
                 if (m > 0) inner = $" · 막힌 구역 {rooms.Count}곳 → Unknown ({m:N0} px, Ctrl+Z로 이것만 되돌림)";
             }
         }
-        SetStatus($"벽 끊김 {targets.Count:N0}개 연결 ({n:N0} px)" + inner + blocked);
+        SetStatus($"벽 끊김 {targets.Count:N0}개 연결 ({n:N0} px)" + inner + blocked, undo: n > 0);
     }
 
     // ───────────── 고립 구역 ─────────────
@@ -426,13 +461,36 @@ public partial class MainWindow
     /// <summary>주행 공간의 이 비율 이상인 고립 구역은 실제 주행 구역일 수 있어 기본 체크 해제</summary>
     private const double IsolatedLargeShare = 0.05;
 
-    private void OnDetectIsolated(object sender, RoutedEventArgs e)
+    /// <summary>맵 전체 연결 요소를 계산해 큰 맵에서 1초 가까이 걸리므로 백그라운드로. 결과가 맵 내용에 의존해 그동안 편집은 막음</summary>
+    private async void OnDetectIsolated(object sender, RoutedEventArgs e)
     {
         if (_map == null) return;
+        if (_busyCts != null)
+        {
+            SetStatus("진행 중인 작업이 끝난 뒤 다시 시도하세요.");
+            return;
+        }
         PixelRegion? region = _selection;   // 선택 영역이 있으면 그 안에 완전히 들어오는 구역만 (주행 공간 판단은 맵 전체 기준)
+        string scope = ScopeName();
+        MapImage map = _map;
+        byte thr = _occThreshold;
         var sw = Stopwatch.StartNew();
         IsolatedResult r;
-        using (new WaitCursor()) r = WallCleanup.FindIsolated(_map, _occThreshold, region);
+        BeginBusy("고립 구역 찾는 중", lockEditing: true, cancellable: false, showProgress: false);
+        try
+        {
+            r = await Task.Run(() => WallCleanup.FindIsolated(map, thr, region));
+        }
+        catch (Exception ex)
+        {
+            ShowFailure("고립 구역을 찾는 중 문제가 생겼습니다", null, ex, canRetry: false);
+            return;
+        }
+        finally
+        {
+            EndBusy();
+        }
+        if (_map != map) return;   // 계산 중 다른 맵을 엶
         List<Blob> groups = r.Groups;
         var open = new Dictionary<Blob, int>();
         for (int k = 0; k < groups.Count; k++) open[groups[k]] = r.OpenCounts[k];
@@ -450,10 +508,15 @@ public partial class MainWindow
         _bulk = false;
         RefreshMarkers();
         AfterDetect(groups.Count);
+        if (groups.Count == 0)
+            ShowEmpty(IsoEmpty, IsoEmptyText,
+                r.MainArea > 0
+                    ? $"{scope}에서 주행 공간과 끊긴 곳이 없습니다{ExcludedNote(excluded)}. 벽 끊김을 먼저 이으면 막힌 방이 생길 수 있습니다."
+                    : "주행 공간(Free)이 없어 기준을 잡을 수 없습니다. 맵 값을 확인하세요.");
 
         double res = _meta.Resolution;
         string main = r.MainArea > 0 ? $" (주행 공간 {r.MainArea * res * res:0.#} m² 기준)" : " (주행 공간 없음)";
-        SetStatus($"고립 구역 후보 {groups.Count:N0}개 · {ScopeName()}{main} ({sw.ElapsedMilliseconds} ms)" +
+        SetStatus($"고립 구역 후보 {groups.Count:N0}개 · {scope}{main} ({sw.ElapsedMilliseconds} ms)" +
                   (large > 0 ? $" · 큰 구역 {large}개는 체크 해제 상태" : "") +
                   (excluded > 0 ? $" · 보호 영역 {excluded}개 제외" : ""));
     }
@@ -484,7 +547,7 @@ public partial class MainWindow
         }
         int n = CommitEdit();
         RemoveItems(_isoCandidates, targets);
-        SetStatus($"고립 구역 {targets.Count:N0}곳 → Unknown ({n:N0} px)" + BlockedNote());
+        SetStatus($"고립 구역 {targets.Count:N0}곳 → Unknown ({n:N0} px)" + BlockedNote(), undo: n > 0);
     }
 
     // ───────────── 확률값 / 외곽 ─────────────
@@ -501,10 +564,6 @@ public partial class MainWindow
         bool toUnknown = ProbToUnknown.IsChecked == true;
         byte lowTarget = toUnknown ? MapValues.Unknown : MapValues.Free;
         string lowName = toUnknown ? "Unknown" : "Free";
-        if (_selection == null &&
-            !Confirm($"선택 영역이 없어 맵 전체에 적용합니다.\n{freeMax} 이하 → {lowName}, {_occThreshold} 이상 → 장애물\n계속할까요?", "확률값 정리"))
-            return;
-
         (int toObs, int toLow) r;
         BeginEdit($"확률값 정리 ({lowName})", useClip: false);
         using (new WaitCursor())
@@ -512,7 +571,8 @@ public partial class MainWindow
             r = WallCleanup.CleanProbability(_selection, _occThreshold, (byte)freeMax, lowTarget, _tracker);
             CommitEdit();
         }
-        SetStatus($"확률값 정리 · {ScopeName()}: 장애물 {r.toObs:N0} px, {lowName} {r.toLow:N0} px" + BlockedNote());
+        SetStatus($"확률값 정리 · {ScopeName()} ({freeMax} 이하 → {lowName}, {_occThreshold} 이상 → 장애물): " +
+                  $"장애물 {r.toObs:N0} px, {lowName} {r.toLow:N0} px" + BlockedNote(), undo: r.toObs + r.toLow > 0);
     }
 
     private void OnClearOutside(object sender, RoutedEventArgs e)
@@ -523,9 +583,6 @@ public partial class MainWindow
             SetStatus("건물 외곽을 폴리곤(P)이나 사각형(M)으로 먼저 선택하세요.");
             return;
         }
-        if (!Confirm("선택 영역 밖의 모든 픽셀을 Unknown(0)으로 바꿉니다. (보호 영역 제외)\n계속할까요?", "외곽 정리"))
-            return;
-
         int n;
         BeginEdit("외곽 정리", useClip: false);
         using (new WaitCursor())
@@ -533,7 +590,7 @@ public partial class MainWindow
             n = WallCleanup.ClearOutside(_selection, _tracker);
             CommitEdit();
         }
-        SetStatus($"외곽 정리: {n:N0} px → Unknown" + BlockedNote());
+        SetStatus($"외곽 정리: 선택 영역 밖 {n:N0} px → Unknown" + BlockedNote(), undo: n > 0);
     }
 
     // ───────────── 기울기 보정 ─────────────
@@ -543,7 +600,8 @@ public partial class MainWindow
         if (_map == null) return;
         if (_reference != null)
         {
-            ShowError("기준 맵 비교 중에는 사용할 수 없습니다.\n업데이트 보정은 기존 좌표를 유지해야 합니다.");
+            ShowError("기준 맵을 연 상태에서는 기울기를 보정할 수 없습니다",
+                "업데이트 보정은 기존 좌표를 유지해야 합니다. 기준 맵을 닫은 뒤 다시 시도하세요.");
             return;
         }
         double? axisOpt = GetAxis();
@@ -561,11 +619,16 @@ public partial class MainWindow
         double rad = axis * Math.PI / 180, c = Math.Abs(Math.Cos(rad)), s = Math.Abs(Math.Sin(rad));
         int nw = (int)Math.Ceiling(_map.Width * c + _map.Height * s - 1e-9);
         int nh = (int)Math.Ceiling(_map.Width * s + _map.Height * c - 1e-9);
-        if (!Confirm($"맵을 {axis:0.00}° 회전해 벽을 수평·수직으로 맞춥니다.\n\n" +
-                     $"· 크기: {_map.Width} × {_map.Height} → {nw} × {nh}\n" +
-                     "· 좌표계가 바뀌어 스테이션·경로를 다시 티칭해야 합니다.\n" +
-                     "· 실행 취소 이력이 초기화됩니다. (저장 전이면 파일을 다시 열어 되돌릴 수 있음)\n" +
-                     "· 보호 영역과 도면 배치는 같이 회전합니다.\n\n계속할까요?", "기울기 보정"))
+        // 실행 취소 이력이 초기화되는 유일한 작업이라 확인
+        if (!Confirm($"맵을 {axis:0.00}° 회전할까요?",
+                     "벽을 수평 · 수직으로 맞춥니다. 실행 취소할 수 없습니다. 저장 전이면 파일을 다시 열어 되돌릴 수 있습니다.",
+                     "회전",
+                     new[]
+                     {
+                         ("크기", $"{_map.Width} × {_map.Height} → {nw} × {nh}"),
+                         ("좌표계", "바뀜 · 스테이션 · 경로를 다시 티칭해야 합니다"),
+                         ("같이 회전", "보호 영역 · 도면 배치 · 맞출 맵"),
+                     }))
             return;
 
         CancelDrag();

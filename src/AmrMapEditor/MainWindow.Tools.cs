@@ -95,7 +95,7 @@ public partial class MainWindow
 
     private void OnMapMouseDown(object? sender, MapMouseEventArgs e)
     {
-        if (_map == null || _tracker == null) return;
+        if (_map == null || _tracker == null || BusyBlocked()) return;
         if (_alignStep > 0)
         {
             HandleAlignClick(e.X, e.Y);
@@ -316,7 +316,7 @@ public partial class MainWindow
             n = Raster.FloodFill(_map, x, y, _drawValue, _tracker);
             CommitEdit();
         }
-        SetStatus((n > 0 ? $"채우기: {n:N0} px" : "채우기: 변경 없음 (같은 값이거나 선택 영역 밖)") + BlockedNote());
+        SetStatus((n > 0 ? $"채우기: {n:N0} px" : "채우기: 변경 없음 (같은 값이거나 선택 영역 밖)") + BlockedNote(), undo: n > 0);
     }
 
     // ───────────── 폴리곤 선택 ─────────────
@@ -395,7 +395,7 @@ public partial class MainWindow
         }
         else
         {
-            CustomValueBox.BorderBrush = Brushes.Red;
+            CustomValueBox.SetResourceReference(Control.BorderBrushProperty, "DangerTextBrush");
         }
     }
 
@@ -462,10 +462,10 @@ public partial class MainWindow
         {
             ScopeText.Text = "대상  맵 전체";
         }
-        ScopeBar.Background = Res(has ? "AccentSoftBrush" : "CardBrush");
-        ScopeBar.BorderBrush = has ? Res("AccentSoftBrush") : Res("CardLineBrush");
-        ScopeIcon.Stroke = Res(has ? "AccentBrush" : "SecondaryLabelBrush");
-        ScopeText.Foreground = Res(has ? "LabelBrush" : "SecondaryLabelBrush");
+        // 테마가 바뀌어도 따라가도록 리소스 참조로 지정
+        ScopeBar.SetResourceReference(Border.BackgroundProperty, has ? "AccentSoftBrush" : "CardBrush");
+        ScopeIcon.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, has ? "AccentTextBrush" : "SecondaryLabelBrush");
+        ScopeText.SetResourceReference(TextBlock.ForegroundProperty, has ? "LabelBrush" : "SecondaryLabelBrush");
         ScopeClearButton.Visibility = has ? Visibility.Visible : Visibility.Collapsed;
 
         FillSelectionButton.IsEnabled = has;
@@ -492,7 +492,7 @@ public partial class MainWindow
         BeginEdit("선택 영역 채우기");
         s.ForEach((x, y) => tracker.Set(x, y, value));
         CommitEdit();
-        SetStatus($"선택 영역을 {MapValues.Describe(_drawValue)}(으)로 채움" + BlockedNote());
+        SetStatus($"선택 영역을 {MapValues.Describe(_drawValue)}(으)로 채움" + BlockedNote(), undo: true);
     }
 
     private void OnClearSelection(object sender, RoutedEventArgs e) => SetSelection(null);

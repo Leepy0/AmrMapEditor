@@ -4,6 +4,8 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -41,6 +43,7 @@ public partial class MainWindow
     private SecondView _secondView = SecondView.Overlay;
     private readonly ObservableCollection<RegionItem> _secondRegions = new();
     private DispatcherTimer? _secondDiffTimer;
+    private bool _secondBusy;   // 자동 정렬 계산 중: 맞출 맵 위치 변경 · 닫기 막음 (현재 맵 편집은 복사본으로 계산하므로 가능)
 
     // 끌기 (이동 / Shift = 회전)
     private bool _secondDragging, _secondRotating;
@@ -61,6 +64,7 @@ public partial class MainWindow
             SetStatus("먼저 현재 맵을 여세요.");
             return;
         }
+        if (SecondBusyBlocked()) return;
         var dlg = new OpenFileDialog { Filter = PgmFilter, Title = "맞출 맵 열기 (나눠 그린 맵 · 새로 그린 일부 맵)" };
         if (dlg.ShowDialog(this) == true) OpenSecond(dlg.FileName);
     }
@@ -69,14 +73,17 @@ public partial class MainWindow
     {
         if (_map == null) return;
         MapImage m;
-        try
+        while (true)
         {
-            m = PgmIO.Read(path);
-        }
-        catch (Exception ex)
-        {
-            ShowError($"맞출 맵을 열 수 없습니다.\n\n{ex.Message}");
-            return;
+            try
+            {
+                m = PgmIO.Read(path);
+                break;
+            }
+            catch (Exception ex)
+            {
+                if (!ShowFailure("맞출 맵을 열 수 없습니다", path, ex, canRetry: true)) return;
+            }
         }
         OpenSecond(path, m);
     }
@@ -87,7 +94,8 @@ public partial class MainWindow
         MapMeta? meta = MapMeta.TryLoadForImage(path);
         if (meta?.SourcePath != null && Math.Abs(meta.Resolution - _meta.Resolution) > _meta.Resolution * 1e-6)
         {
-            ShowError($"해상도가 달라 맞출 수 없습니다.\n현재 맵 {_meta.Resolution} m/px, 맞출 맵 {meta.Resolution} m/px");
+            ShowError("해상도가 달라 맞출 수 없습니다",
+                $"현재 맵 {_meta.Resolution} m/px, 맞출 맵 {meta.Resolution} m/px입니다. 같은 해상도로 저장한 맵만 맞출 수 있습니다.");
             return;
         }
 
@@ -130,6 +138,7 @@ public partial class MainWindow
 
     private void OnCloseSecond(object sender, RoutedEventArgs e)
     {
+        if (SecondBusyBlocked()) return;
         string? name = _secondPath != null ? Path.GetFileName(_secondPath) : null;
         CloseSecond();
         if (name != null) SetStatus($"맞출 맵 닫음: {name}");
@@ -137,6 +146,7 @@ public partial class MainWindow
 
     private void CloseSecond()
     {
+        if (_secondBusy) _busyCts?.Cancel();   // 닫히는 맵의 자동 정렬은 결과를 쓸 곳이 없음
         CancelPair();
         _secondDragging = false;
         _secondDiffTimer?.Stop();
@@ -154,6 +164,7 @@ public partial class MainWindow
         MapViewer.SetSecondPose(null, null);
         if (_tool == EditTool.SecondMove) SelectTool(EditTool.Brush);
         RefreshSecondUi();
+        RefreshStatusChips();
     }
 
     /// <summary>현재 맵과 맞출 맵이 모두 보이게</summary>
@@ -174,7 +185,9 @@ public partial class MainWindow
         SecondUndoPoseButton.IsEnabled = _secondHistory.Count > 0;
         SecondYamlButton.IsEnabled = has && _secondMeta != null && _meta.SourcePath != null;
         SecondDiffList.Visibility = _secondRegions.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (_secondRegions.Count > 0 || !has) SecondDiffEmpty.Visibility = Visibility.Collapsed;
         UpdateSecondStats();
+        RefreshStatusChips();
         if (_second == null)
         {
             SecondFileText.Text = "";
@@ -384,6 +397,7 @@ public partial class MainWindow
             SetStatus("맞추기 탭에서 맞출 맵을 먼저 여세요.");
             return;
         }
+        if (SecondBusyBlocked()) return;
         _secondDragging = true;
         _secondRotating = (e.Modifiers & ModifierKeys.Shift) != 0;
         _secondDragStart = new PointD(e.ImageX, e.ImageY);
@@ -427,6 +441,11 @@ public partial class MainWindow
     private bool HandleSecondKey(Key key, bool shift)
     {
         if (_second == null) return false;
+        if (_secondBusy && key is Key.Left or Key.Right or Key.Up or Key.Down or Key.OemComma or Key.OemPeriod)
+        {
+            SecondBusyBlocked();
+            return true;
+        }
         double step = shift ? 10 : 1, rot = shift ? 1 : 0.1;
         MapPose p = _secondPose;
         switch (key)
@@ -539,18 +558,63 @@ public partial class MainWindow
 
     // ───────────── 자동 정렬 ─────────────
 
-    private void OnSecondAutoAlign(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// 자동 정렬은 큰 맵에서 수 초 걸리므로 백그라운드로 계산하고 단계 · 진행률 · 취소를 보여줌.
+    /// 현재 맵은 복사본으로 계산하므로 그동안 화면 이동 · 편집은 계속 가능
+    /// </summary>
+    private async void OnSecondAutoAlign(object sender, RoutedEventArgs e)
     {
         if (_map == null || _second == null) return;
+        if (_busyCts != null)
+        {
+            SetStatus("진행 중인 작업이 끝난 뒤 다시 시도하세요.");
+            return;
+        }
         if (!ReadInt(SecondRadiusBox, 2, 300, "이동 탐색 범위", out int radius)) return;
         if (!ReadDouble(SecondAngleBox, 0, 30, "회전 탐색 범위", out double angle)) return;
         CancelPair();
+        ClearAlignResult();
 
-        SetStatus("자동 정렬 중…");
-        FlushRender();
+        MapImage second = _second, snapshot = _map.Clone();
+        MapPose start = _secondPose;
+        byte thr = _occThreshold;
+        CancellationToken ct = BeginBusy("자동 정렬 중", lockEditing: false, cancellable: true, showProgress: true);
+        SetSecondBusy(true);
+        var progress = new Progress<AlignProgress>(p =>
+        {
+            if (!_secondBusy) return;
+            SecondProgressBar.Value = p.Percent;
+            SecondProgressPercent.Text = $"{p.Percent:0} %";
+            SecondProgressText.Text = p.Stage switch
+            {
+                1 => "1/3 벽 점 추출",
+                2 => "2/3 대략 위치 찾기",
+                _ => "3/3 세밀하게 맞추기",
+            };
+            ReportBusy(p.Percent);
+        });
+
         AlignResult? r;
-        using (new WaitCursor())
-            r = MapRegistration.Refine(_map, _second, _occThreshold, _secondPose, radius, angle);
+        try
+        {
+            r = await Task.Run(() => MapRegistration.Refine(snapshot, second, thr, start, radius, angle, progress, ct), ct);
+        }
+        catch (OperationCanceledException)
+        {
+            SetStatus("자동 정렬을 취소했습니다. 맞출 맵 위치는 그대로입니다.");
+            return;
+        }
+        catch (Exception ex)
+        {
+            ShowFailure("자동 정렬 중 문제가 생겼습니다", null, ex, canRetry: false);
+            return;
+        }
+        finally
+        {
+            SetSecondBusy(false);
+            EndBusy();
+        }
+        if (_second != second || _map == null) return;   // 계산 중 현재 맵을 닫거나 다른 맵을 엶
 
         if (r == null)
         {
@@ -623,8 +687,24 @@ public partial class MainWindow
         if (text.Length == 0) SecondAlignText.ToolTip = null;
     }
 
-    /// <summary>오래 걸리는 작업 전에 상태 문구가 먼저 그려지도록</summary>
-    private void FlushRender() => Dispatcher.Invoke(DispatcherPriority.Render, new Action(() => { }));
+    /// <summary>자동 정렬 중: 정렬 버튼 대신 진행 표시, 위치를 바꾸는 카드는 비활성</summary>
+    private void SetSecondBusy(bool busy)
+    {
+        _secondBusy = busy;
+        SecondFileCard.IsEnabled = SecondCard1.IsEnabled = SecondCard3.IsEnabled = SecondCard4.IsEnabled = !busy;
+        SecondAlignButton.Visibility = busy ? Visibility.Collapsed : Visibility.Visible;
+        SecondProgressPanel.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        SecondProgressBar.Value = 0;
+        SecondProgressPercent.Text = "0 %";
+        SecondProgressText.Text = "준비";
+    }
+
+    private bool SecondBusyBlocked()
+    {
+        if (!_secondBusy) return false;
+        SetStatus("자동 정렬 중입니다. 끝난 뒤 다시 시도하세요.  Esc = 취소");
+        return true;
+    }
 
     // ───────────── 비교 ─────────────
 
@@ -639,10 +719,11 @@ public partial class MainWindow
     private void InvalidateSecondDiff(bool poseChanged)
     {
         if (_second == null) return;
-        if (poseChanged && _secondRegions.Count > 0)
+        if (poseChanged)
         {
             _secondRegions.Clear();
             SecondDiffList.Visibility = Visibility.Collapsed;
+            SecondDiffEmpty.Visibility = Visibility.Collapsed;
         }
         if (_secondDiff == null && _secondView != SecondView.Diff) return;
         _secondDiff = null;
@@ -689,6 +770,13 @@ public partial class MainWindow
         foreach ((IntRect b, int area, bool added) in regions.Take(MaxSecondRegions))
             _secondRegions.Add(new RegionItem(index++, b, $"{(added ? "추가" : "삭제")} · {area:N0} px · {b.Width}×{b.Height}"));
         SecondDiffList.Visibility = _secondRegions.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (regions.Count == 0)
+            ShowEmpty(SecondDiffEmpty, SecondDiffEmptyText,
+                diff.NewAreaCount > 0
+                    ? $"겹친 곳의 벽은 모두 같습니다. 현재 맵에 없던 곳 {diff.NewAreaCount:N0} px는 반영 · 합치기로 가져올 수 있습니다."
+                    : "겹친 곳의 벽이 모두 같습니다.");
+        else
+            SecondDiffEmpty.Visibility = Visibility.Collapsed;
 
         if (_secondView != SecondView.Diff) SecondShowDiff.IsChecked = true;   // 핸들러에서 레이어 갱신
         int addedCount = regions.Count(x => x.Added);
@@ -720,33 +808,38 @@ public partial class MainWindow
             return;
         }
 
-        var msg = new StringBuilder();
-        msg.AppendLine("맞출 맵이 알고 있는 곳(Unknown 제외)을 현재 맵에 덮어씁니다.");
-        msg.AppendLine();
-        msg.AppendLine(region != null ? "· 범위: 선택 영역 안" : "· 범위: 맞출 맵 전체 (현재 맵 안쪽)");
-        if (SecondOutsideText.Visibility == Visibility.Visible) msg.AppendLine("· " + SecondOutsideText.Text);
-        msg.AppendLine(_reference == null
-            ? "· 반영 전 맵을 기준 맵으로 두고, 반영 범위를 업데이트 영역으로 지정합니다.\n  업데이트 탭에서 변경점 확인 · 이중 벽 정리를 이어서 할 수 있습니다."
-            : $"· 열려 있는 기준 맵({_referenceName})은 그대로 두고, 반영 범위를 업데이트 영역에 추가합니다.");
-        msg.AppendLine("· 실행 취소(Ctrl+Z)로 되돌릴 수 있습니다.");
-        msg.AppendLine();
-        msg.Append("계속할까요?");
-        if (!Confirm(msg.ToString(), "현재 맵에 반영")) return;
+        if (SecondBusyBlocked()) return;
 
+        // 확인창 없이 실행: Ctrl+Z 한 번으로 픽셀 · 기준 맵 · 업데이트 영역까지 함께 되돌림
         CancelDrag();
         CancelPolygon();
         CancelPair();
 
+        MapImage? newReference = null;
+        string? newReferenceName = null;
         if (_reference == null)
-            SetReference(_map.Clone(), $"반영 전 · {Path.GetFileName(_path)}", "맞출 맵 반영 전 상태");
+        {
+            newReference = _map.Clone();
+            newReferenceName = $"반영 전 · {Path.GetFileName(_path)}";
+            SetReference(newReference, newReferenceName, "맞출 맵 반영 전 상태");
+        }
 
         int n;
+        _lastCommit = null;
         BeginEdit($"맞출 맵 반영 ({Path.GetFileName(_secondPath)})", useClip: false);
         using (new WaitCursor())
         {
             n = MapRegistration.ApplyInto(_tracker, _second, _secondPose, region);
             CommitEdit();
         }
+        if (_lastCommit == null)
+        {
+            // 바뀐 픽셀이 없음: 방금 만든 기준 맵도 정리
+            if (newReference != null) CloseReference();
+            SetStatus("맞출 맵이 현재 맵과 같아 반영할 내용이 없습니다." + BlockedNote());
+            return;
+        }
+        _applyUndo = new ApplyUndo(_lastCommit, newReference, newReferenceName, area);
         if (region != null) SetSelection(null);
         _updateAreas.Add(area);
         UpdateAreasChanged();
@@ -754,7 +847,10 @@ public partial class MainWindow
         // 업데이트 탭 변경점이 보이도록 레이어는 숨김
         SecondShowHidden.IsChecked = true;
         SegUpdate.IsChecked = true;
-        SetStatus($"맞출 맵 {n:N0} px 반영 · 업데이트 탭에서 변경점을 확인하세요" + BlockedNote());
+        string scope = region != null ? "선택 영역" : "맞출 맵 전체";
+        SetStatus($"맞출 맵 반영 · {scope} {n:N0} px" +
+                  (newReference != null ? " · 반영 전 맵을 기준 맵으로 열고 반영 범위를 업데이트 영역으로 지정" : " · 반영 범위를 업데이트 영역에 추가") +
+                  BlockedNote(), undo: true);
     }
 
     // ───────────── 합치기 ─────────────
@@ -787,7 +883,7 @@ public partial class MainWindow
 
     private void OnSecondMerge(object sender, RoutedEventArgs e)
     {
-        if (_map == null || _second == null) return;
+        if (_map == null || _second == null || SecondBusyBlocked()) return;
         MergeRule rule = SelectedMergeRule();
         if (rule == MergeRule.RegionMovingFirst && _selection == null)
         {
@@ -799,20 +895,25 @@ public partial class MainWindow
         int nw = mb.Width, nh = mb.Height;
         if ((long)nw * nh > 400_000_000L)
         {
-            ShowError($"결과 맵이 너무 큽니다 ({nw} × {nh} px). 맞출 맵 위치를 확인하세요.");
+            ShowError("결과 맵이 너무 큽니다",
+                $"합치면 {nw} × {nh} px가 됩니다. 맞출 맵이 엉뚱한 곳에 놓였는지 위치를 확인하세요.");
             return;
         }
 
+        // 실행 취소 이력이 초기화되므로 확인
         string yaml = _meta.SourcePath != null
-            ? "· yaml origin을 새 크기에 맞게 갱신합니다. 기존 영역의 월드 좌표는 그대로입니다."
-            : "· yaml이 없어 새 origin은 직접 반영해야 합니다.";
-        if (!Confirm("두 맵을 합쳐 새 맵을 만듭니다.\n\n" +
-                     $"· 크기: {_map.Width} × {_map.Height} → {nw} × {nh}\n" +
-                     $"· 겹친 곳: {MergeRuleName(rule)}\n" +
-                     $"{yaml}\n" +
-                     "· 실행 취소 이력이 초기화되고, 열린 기준 맵과 맞출 맵은 닫힙니다.\n" +
-                     "· 보호 영역과 도면 배치는 같이 옮깁니다.\n" +
-                     "· 원본을 남기려면 저장할 때 '다른 이름으로 저장'(Ctrl+Shift+S)을 쓰세요.\n\n계속할까요?", "맵 합치기"))
+            ? "새 크기에 맞게 갱신 · 기존 영역의 월드 좌표는 그대로"
+            : "yaml이 없어 새 origin은 직접 반영해야 합니다";
+        if (!Confirm("두 맵을 합칠까요?",
+                     "실행 취소할 수 없고, 열린 기준 맵과 맞출 맵은 닫힙니다. 원본을 남기려면 저장할 때 다른 이름으로 저장(Ctrl+Shift+S)하세요.",
+                     "합치기",
+                     new[]
+                     {
+                         ("크기", $"{_map.Width} × {_map.Height} → {nw} × {nh}"),
+                         ("겹친 곳", MergeRuleName(rule)),
+                         ("yaml origin", yaml),
+                         ("같이 옮김", "보호 영역 · 도면 배치"),
+                     }))
             return;
 
         CancelDrag();

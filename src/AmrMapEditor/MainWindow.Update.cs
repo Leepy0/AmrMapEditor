@@ -44,14 +44,17 @@ public partial class MainWindow
         if (dlg.ShowDialog(this) != true) return;
 
         MapImage r;
-        try
+        while (true)
         {
-            r = PgmIO.Read(dlg.FileName);
-        }
-        catch (Exception ex)
-        {
-            ShowError($"기준 맵을 열 수 없습니다.\n\n{ex.Message}");
-            return;
+            try
+            {
+                r = PgmIO.Read(dlg.FileName);
+                break;
+            }
+            catch (Exception ex)
+            {
+                if (!ShowFailure("기준 맵을 열 수 없습니다", dlg.FileName, ex, canRetry: true)) return;
+            }
         }
 
         // 좌표 정렬: 두 맵 모두 yaml이 있으면 origin 기준, 없으면 크기가 같을 때만 그대로 비교
@@ -64,7 +67,8 @@ public partial class MainWindow
             var off = MapAlign.OffsetFromMeta(_meta, _map.Height, refMeta, r.Height);
             if (off == null)
             {
-                ShowError($"해상도가 달라 비교할 수 없습니다.\n현재 {_meta.Resolution} m/px, 기준 {refMeta.Resolution} m/px");
+                ShowError("해상도가 달라 비교할 수 없습니다",
+                    $"현재 맵 {_meta.Resolution} m/px, 기준 맵 {refMeta.Resolution} m/px입니다. 같은 해상도로 저장한 맵만 비교할 수 있습니다.");
                 return;
             }
             (dx, dy) = off.Value;
@@ -72,11 +76,9 @@ public partial class MainWindow
         }
         else if (!sameSize)
         {
-            dy = r.Height - _map.Height;   // origin(왼쪽 아래) 동일 가정
-            if (!Confirm($"맵 크기가 다릅니다.\n현재 맵: {_map.Width} × {_map.Height}\n기준 맵: {r.Width} × {r.Height}\n\n" +
-                         "yaml이 없어 왼쪽 아래(origin)가 같다고 보고 맞춥니다. 계속할까요?", "기준 맵 정렬"))
-                return;
-            note = "왼쪽 아래 기준 정렬 (yaml 없음)";
+            // yaml이 없으면 왼쪽 아래(origin)가 같다고 보고 맞춤. 틀리면 아래 벽 불일치 검사에서 걸러짐
+            dy = r.Height - _map.Height;
+            note = $"크기 다름 ({r.Width} × {r.Height}) · 왼쪽 아래 기준 정렬";
         }
 
         MapImage aligned = dx == 0 && dy == 0 && sameSize ? r : MapAlign.Shift(r, _map.Width, _map.Height, dx, dy);
@@ -86,13 +88,13 @@ public partial class MainWindow
         using (new WaitCursor()) mismatch = UpdateCorrection.ObstacleMismatch(_map, aligned, _occThreshold);
         if (mismatch > MismatchLimit)
         {
-            MessageBoxResult choice = MessageBox.Show(this,
-                $"두 맵의 벽이 {mismatch:P0} 어긋납니다. 같은 좌표계에서 업데이트한 맵이 아닐 수 있습니다.\n" +
-                "이 상태로 업데이트 보정(영역 밖 되돌리기 · 옮겨서 합치기)을 하면 기준 맵 내용이 현재 맵에 덮어써집니다.\n\n" +
-                "[예]  맞추기 탭에서 위치를 맞춰 비교 (권장)\n[아니요]  그대로 기준 맵으로 열기",
-                "기준 맵 열기", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
-            if (choice == MessageBoxResult.Cancel) return;
-            if (choice == MessageBoxResult.Yes)
+            int choice = MessageDialog.Show(this, DialogKind.Warning, "따로 그린 맵 같습니다",
+                $"두 맵의 벽이 {mismatch:P0} 어긋납니다. 같은 좌표계에서 업데이트한 맵이 아닐 수 있습니다. " +
+                "이대로 기준 맵으로 쓰면 영역 밖 되돌리기 · 옮겨서 합치기가 기준 맵 내용을 현재 맵에 덮어씁니다.",
+                new[] { ("권장", "맞추기 탭에서 위치를 맞춘 뒤 비교 · 반영") }, null,
+                new[] { new DialogButton("맞추기 탭에서 열기", Primary: true), new DialogButton("기준 맵으로 열기"), new DialogButton("취소", Cancel: true) }, 0);
+            if (choice is 2 or < 0) return;
+            if (choice == 0)
             {
                 OpenSecond(dlg.FileName, r);
                 return;
@@ -112,6 +114,7 @@ public partial class MainWindow
         RefFileText.Text = name + (note.Length > 0 ? $" · {note}" : "");
         RefFileText.ToolTip = (path ?? name) + (note.Length > 0 ? $"\n{note}" : "");
         _diffRegions.Clear();
+        DiffEmpty.Visibility = Visibility.Collapsed;
         _dupCandidates.Clear();
         _dupDetected = false;
         _lastOffset = null;
@@ -125,6 +128,7 @@ public partial class MainWindow
 
         RefreshMarkers();
         UpdateDiffStats();
+        RefreshStatusChips();
     }
 
     private void OnCloseReference(object sender, RoutedEventArgs e)
@@ -159,6 +163,7 @@ public partial class MainWindow
         MapViewer.Refresh();
         RefreshMarkers();
         RefreshUpdateGuide();
+        RefreshStatusChips();
         if (_tool == EditTool.Restore) SelectTool(EditTool.Brush);
     }
 
@@ -272,7 +277,7 @@ public partial class MainWindow
             n = UpdateCorrection.RevertOutside(_reference, _updateMask, _tracker);
             CommitEdit();
         }
-        SetStatus((n == 0 ? "영역 밖 변경 없음" : $"영역 밖 변경 {n:N0} px를 기준 맵 값으로 되돌림") + BlockedNote());
+        SetStatus((n == 0 ? "영역 밖 변경 없음" : $"영역 밖 변경 {n:N0} px를 기준 맵 값으로 되돌림") + BlockedNote(), undo: n > 0);
     }
 
     // ───────────── 4. 어긋남 / 재정렬 ─────────────
@@ -285,9 +290,10 @@ public partial class MainWindow
         double mm;
         using (new WaitCursor()) mm = UpdateCorrection.ObstacleMismatch(_map!, _reference!, _occThreshold);
         if (mm <= MismatchLimit) return true;
-        return Confirm($"기준 맵과 현재 맵의 벽이 {mm:P0} 어긋납니다 (같은 좌표계에서 업데이트한 맵이면 보통 {MismatchLimit:P0} 미만).\n" +
-                       $"{what} 기준 맵 내용이 현재 맵에 덮어써질 수 있습니다.\n\n" +
-                       "따로 그린 맵이면 취소하고 '맞추기' 탭에서 위치를 맞춰 비교 · 반영하세요. 그래도 계속할까요?", title);
+        return Confirm("기준 맵과 벽이 많이 어긋납니다",
+                       $"{what} 기준 맵 내용이 현재 맵에 덮어써질 수 있습니다. 따로 그린 맵이면 취소하고 '맞추기' 탭에서 위치를 맞춰 비교 · 반영하세요.",
+                       title,
+                       new[] { ("벽 불일치", $"{mm:P0} (같은 좌표계 업데이트는 보통 {MismatchLimit:P0} 미만)") });
     }
 
     private void OnEstimateOffset(object sender, RoutedEventArgs e)
@@ -371,7 +377,7 @@ public partial class MainWindow
         _dupCandidates.Clear();
         _dupDetected = false;
         RefreshMarkers();
-        SetStatus($"업데이트분 {moved:N0} px를 ({dx}, {dy}) 이동해 합성" + BlockedNote());
+        SetStatus($"업데이트분 {moved:N0} px를 ({dx}, {dy}) 이동해 합성" + BlockedNote(), undo: moved > 0);
     }
 
     // ───────────── 5. 이중 벽 ─────────────
@@ -402,8 +408,14 @@ public partial class MainWindow
         RefreshMarkers();
         RefreshUpdateGuide();
         AfterDetect(blobs.Count);
+        if (blobs.Count == 0)
+            ShowEmpty(DupEmpty, DupEmptyText,
+                $"기존 벽에서 {dist:0.#} px 이내, {minArea:N0} px 이상인 새 장애물이 없습니다{ExcludedNote(excluded)}. " +
+                "어긋남이 크면 거리를 늘려 보세요.");
         SetStatus($"이중 벽 후보 {blobs.Count:N0}개" + (excluded > 0 ? $" (보호 영역 {excluded}개 제외)" : ""));
     }
+
+    private void OnOpenDupOptions(object sender, RoutedEventArgs e) => OpenOptions(DupOptions, DupDistBox);
 
     private void OnDupSelected(object sender, SelectionChangedEventArgs e)
     {
@@ -434,7 +446,7 @@ public partial class MainWindow
         }
 
         RemoveItems(_dupCandidates, targets);
-        SetStatus($"이중 벽 {targets.Count:N0}개를 기준 맵 값으로 복원 ({n:N0} px)" + BlockedNote());
+        SetStatus($"이중 벽 {targets.Count:N0}개를 기준 맵 값으로 복원 ({n:N0} px)" + BlockedNote(), undo: n > 0);
     }
 
     // ───────────── 6. 변경 영역 ─────────────
@@ -459,7 +471,7 @@ public partial class MainWindow
         BeginEdit("선택 영역 복원");
         s.ForEach((x, y) => tracker.Set(x, y, reference.Get(x, y)));
         int n = CommitEdit();
-        SetStatus($"선택 영역을 기준 맵 값으로 복원 ({n:N0} px)" + BlockedNote());
+        SetStatus($"선택 영역을 기준 맵 값으로 복원 ({n:N0} px)" + BlockedNote(), undo: n > 0);
     }
 
     private void OnFindDiffRegions(object sender, RoutedEventArgs e)
@@ -482,6 +494,10 @@ public partial class MainWindow
         foreach (Blob b in regions.OrderByDescending(x => x.Area).Take(MaxDiffRegions))
             _diffRegions.Add(new RegionItem(index++, b));
         DiffRegionList.Visibility = _diffRegions.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (regions.Count == 0)
+            ShowEmpty(DiffEmpty, DiffEmptyText, "현재 맵과 기준 맵의 모든 픽셀 값이 같습니다. 업데이트한 내용이 저장됐는지 확인하세요.");
+        else
+            DiffEmpty.Visibility = Visibility.Collapsed;
 
         SetStatus(regions.Count == 0
             ? "변경 영역 없음"
@@ -503,6 +519,7 @@ public partial class MainWindow
         RefEmptyPanel.Visibility = hasRef ? Visibility.Collapsed : Visibility.Visible;
         RefStepsPanel.Visibility = hasRef ? Visibility.Visible : Visibility.Collapsed;
         DiffRegionList.Visibility = _diffRegions.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (!hasRef) DiffEmpty.Visibility = Visibility.Collapsed;
         // 기울기 보정은 좌표계를 바꾸므로 기준 맵 비교 중에는 막음
         DeskewButton.IsEnabled = _reference == null;
         if (!hasRef)
@@ -522,11 +539,11 @@ public partial class MainWindow
         SetStep(Step5Badge, Step5Text, 5, _dupDetected && _dupCandidates.Count == 0);
     }
 
-    /// <summary>단계 번호 원: 완료되면 초록 체크</summary>
-    private void SetStep(Border badge, TextBlock text, int step, bool done)
+    /// <summary>단계 번호 원: 완료되면 초록 체크 (테마 전환에 따라가도록 리소스 참조)</summary>
+    private static void SetStep(Border badge, TextBlock text, int step, bool done)
     {
-        badge.Background = Res(done ? "GreenBrush" : "SegmentTrackBrush");
+        badge.SetResourceReference(Border.BackgroundProperty, done ? "SuccessBrush" : "SegmentTrackBrush");
         text.Text = done ? "✓" : step.ToString();
-        text.Foreground = done ? Brushes.White : Res("SecondaryLabelBrush");
+        text.SetResourceReference(TextBlock.ForegroundProperty, done ? "OnAccentBrush" : "SecondaryLabelBrush");
     }
 }

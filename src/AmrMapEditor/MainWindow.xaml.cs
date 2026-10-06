@@ -4,7 +4,9 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -21,9 +23,6 @@ public enum EditTool { Brush, Eraser, Line, Rect, Fill, Picker, Select, Polygon,
 public partial class MainWindow : Window
 {
     private const string PgmFilter = "PGM 맵 (*.pgm)|*.pgm|모든 파일 (*.*)|*.*";
-
-    // 입력값 오류 표시 (Apple 시스템 빨강)
-    private static readonly Brush ErrorBrush = CreateFrozen(Color.FromRgb(0xFF, 0x3B, 0x30));
 
     // InitializeComponent 중 발생하는 Checked/TextChanged 이벤트 무시용
     private readonly bool _ready;
@@ -69,6 +68,13 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        // 테마: 저장된 선택, 없으면 Windows 앱 모드
+        bool dark = _settings.Values.TryGetValue("Theme", out string? theme) ? theme == "Dark" : Theme.SystemPrefersDark();
+        Theme.Apply(dark);
+        ThemeToggle.IsChecked = dark;
+        SourceInitialized += (_, _) => Theme.ApplyTitleBar(this);
+        RestoreWindowBounds();
+
         CandidateList.ItemsSource = _candidates;
         DupList.ItemsSource = _dupCandidates;
         GapList.ItemsSource = _gapCandidates;
@@ -90,6 +96,7 @@ public partial class MainWindow : Window
 
         LoadSettings();
         _ready = true;
+        RestoreViewSettings();
 
         if (MapValues.TryParse(OccThresholdBox.Text, out byte thr) && thr >= 2 && thr <= 254) _occThreshold = thr;
         UpdateValueUi();
@@ -101,6 +108,7 @@ public partial class MainWindow : Window
         RefreshMarkers();
         RefreshUpdateGuide();
         RefreshSecondUi();
+        RefreshStatusChips();
     }
 
     private IntRect Full => _map?.Bounds ?? IntRect.Empty;
@@ -130,6 +138,75 @@ public partial class MainWindow : Window
     private void SaveSettings()
     {
         foreach (TextBox box in PersistedBoxes) _settings.Values[box.Name] = box.Text;
+        SaveViewSettings();
+        _settings.Save();
+    }
+
+    // ───────────── 창 상태 · 화면 설정 저장 ─────────────
+
+    /// <summary>창 위치 · 크기 · 최대화 복원 (화면 밖이면 무시)</summary>
+    private void RestoreWindowBounds()
+    {
+        if (!_settings.Values.TryGetValue("Window", out string? v)) return;
+        string[] p = v.Split(',');
+        if (p.Length != 5) return;
+        var ci = CultureInfo.InvariantCulture;
+        if (!double.TryParse(p[0], NumberStyles.Float, ci, out double l) || !double.TryParse(p[1], NumberStyles.Float, ci, out double t) ||
+            !double.TryParse(p[2], NumberStyles.Float, ci, out double w) || !double.TryParse(p[3], NumberStyles.Float, ci, out double h))
+            return;
+        var screen = new Rect(SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
+                              SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
+        if (w < MinWidth || h < MinHeight || !screen.IntersectsWith(new Rect(l + 40, t + 8, Math.Max(1, w - 80), 32))) return;
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        Left = l;
+        Top = t;
+        Width = w;
+        Height = h;
+        if (p[4] == "1") WindowState = WindowState.Maximized;
+    }
+
+    /// <summary>마지막 탭 · 표시 방식 · 격자 · 맞출 맵 불투명도 복원</summary>
+    private void RestoreViewSettings()
+    {
+        if (_settings.Values.TryGetValue("Pane", out string? pane))
+            foreach (RadioButton seg in PaneSegments)
+                if (seg.Name == pane) seg.IsChecked = true;
+        if (_settings.Values.TryGetValue("Display", out string? display) && DisplayStandard.Parent is Panel group)
+            foreach (RadioButton rb in group.Children.OfType<RadioButton>())
+                if (rb.Tag as string == display) rb.IsChecked = true;
+        if (_settings.Values.TryGetValue("Grid", out string? grid))
+        {
+            GridCheck.IsChecked = grid == "1";
+            MapViewer.ShowGrid = grid == "1";
+        }
+        if (_settings.Values.TryGetValue("SecondOpacity", out string? op) &&
+            double.TryParse(op, NumberStyles.Float, CultureInfo.InvariantCulture, out double o))
+            SecondOpacitySlider.Value = Math.Clamp(o, SecondOpacitySlider.Minimum, SecondOpacitySlider.Maximum);
+    }
+
+    private void SaveViewSettings()
+    {
+        Rect b = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
+        var ci = CultureInfo.InvariantCulture;
+        if (!b.IsEmpty)
+            _settings.Values["Window"] = string.Join(",", b.Left.ToString(ci), b.Top.ToString(ci), b.Width.ToString(ci), b.Height.ToString(ci),
+                WindowState == WindowState.Maximized ? "1" : "0");
+        RadioButton? seg = PaneSegments.FirstOrDefault(r => r.IsChecked == true);
+        if (seg != null) _settings.Values["Pane"] = seg.Name;
+        if (DisplayStandard.Parent is Panel group &&
+            group.Children.OfType<RadioButton>().FirstOrDefault(r => r.IsChecked == true)?.Tag is string display)
+            _settings.Values["Display"] = display;
+        _settings.Values["Grid"] = GridCheck.IsChecked == true ? "1" : "0";
+        _settings.Values["SecondOpacity"] = SecondOpacitySlider.Value.ToString(ci);
+        _settings.Values["Theme"] = Theme.IsDark ? "Dark" : "Light";
+    }
+
+    private RadioButton[] PaneSegments => new[] { SegEdit, SegUpdate, SegSecond, SegClean, SegDxf };
+
+    private void OnThemeToggle(object sender, RoutedEventArgs e)
+    {
+        Theme.Apply(ThemeToggle.IsChecked == true);
+        _settings.Values["Theme"] = Theme.IsDark ? "Dark" : "Light";
         _settings.Save();
     }
 
@@ -145,6 +222,7 @@ public partial class MainWindow : Window
 
     private void OnDropFile(object sender, DragEventArgs e)
     {
+        if (BusyBlocked()) return;
         if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
         {
             if (!ConfirmDiscard()) return;
@@ -154,6 +232,7 @@ public partial class MainWindow : Window
 
     private void OnClosing(object? sender, CancelEventArgs e)
     {
+        _busyCts?.Cancel();
         if (!ConfirmDiscard())
         {
             e.Cancel = true;
@@ -164,7 +243,7 @@ public partial class MainWindow : Window
 
     private void OpenWithDialog()
     {
-        if (!ConfirmDiscard()) return;
+        if (BusyBlocked() || !ConfirmDiscard()) return;
         var dlg = new OpenFileDialog { Filter = PgmFilter, Title = "맵 열기" };
         if (dlg.ShowDialog(this) == true) OpenMap(dlg.FileName);
     }
@@ -178,7 +257,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            ShowError($"파일을 열 수 없습니다.\n{path}\n\n{ex.Message}");
+            if (ShowFailure("맵을 열 수 없습니다", path, ex, canRetry: true)) OpenMap(path);
             return;
         }
 
@@ -196,6 +275,7 @@ public partial class MainWindow : Window
         _metaChangeReason = null;
         _tracker = new EditTracker(map);
         _undo.Clear();
+        _applyUndo = null;
         _opLog.Clear();
 
         MapMeta? meta = MapMeta.TryLoadForImage(path);
@@ -239,7 +319,7 @@ public partial class MainWindow : Window
     /// <summary>현재 맵 닫기 (저장 안 된 변경이 있으면 확인). 기준 맵 · 도면 · 후보도 함께 정리</summary>
     private void CloseMap()
     {
-        if (_map == null) return;
+        if (_map == null || BusyBlocked()) return;
         CancelDrag();
         CancelPolygon();
         if (!ConfirmDiscard()) return;
@@ -257,6 +337,7 @@ public partial class MainWindow : Window
         _metaChangeReason = null;
         _tracker = null;
         _undo.Clear();
+        _applyUndo = null;
         _opLog.Clear();
 
         _selection = null;
@@ -287,12 +368,13 @@ public partial class MainWindow : Window
     private bool ConfirmDiscard()
     {
         if (!_dirty) return true;
-        MessageBoxResult r = MessageBox.Show(this, "변경 내용을 저장할까요?", "AMR Map Editor",
-            MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+        string name = _path != null ? Path.GetFileName(_path) : "현재 맵";
+        int r = MessageDialog.Show(this, DialogKind.Warning, "저장하지 않은 변경이 있습니다", $"{name}의 변경 내용을 저장할까요?", null, null,
+            new[] { new DialogButton("저장", Primary: true), new DialogButton("저장 안 함"), new DialogButton("취소", Cancel: true) }, 0);
         return r switch
         {
-            MessageBoxResult.Yes => Save(),
-            MessageBoxResult.No => true,
+            0 => Save(),
+            1 => true,
             _ => false,
         };
     }
@@ -303,7 +385,7 @@ public partial class MainWindow : Window
         return _path == null ? SaveAs() : SaveTo(_path);
     }
 
-    private bool SaveAs()
+    private bool SaveAs(bool confirmed = false)
     {
         if (_map == null) return false;
         var dlg = new SaveFileDialog
@@ -313,52 +395,97 @@ public partial class MainWindow : Window
             FileName = _path != null ? Path.GetFileName(_path) : "map.pgm",
             InitialDirectory = (_path != null ? Path.GetDirectoryName(_path) : null) ?? string.Empty,
         };
-        return dlg.ShowDialog(this) == true && SaveTo(dlg.FileName);
+        return dlg.ShowDialog(this) == true && SaveTo(dlg.FileName, confirmed);
     }
 
-    private bool SaveTo(string path)
+    /// <summary>저장. 확인할 내용(크기 변경 · 영역 밖 변경 · 범위 외 값)이 있을 때만 확인창을 띄움</summary>
+    private bool SaveTo(string path, bool confirmed = false)
     {
-        if (_map == null || _original == null) return false;
+        if (_map == null || _original == null || BusyBlocked()) return false;
         CancelDrag();
         CancelPolygon();
 
-        if (MessageBox.Show(this, BuildSaveReport(), "저장 전 확인", MessageBoxButton.YesNo,
-                MessageBoxImage.Question) != MessageBoxResult.Yes)
-            return false;
+        if (!confirmed)
+        {
+            List<(string Key, string Value)> warnings = SaveWarnings();
+            if (warnings.Count > 0)
+            {
+                int c = MessageDialog.Show(this, DialogKind.Warning, "확인할 내용이 있습니다", "저장 전에 아래를 확인하세요.", warnings,
+                    BuildSaveReport(),
+                    new[] { new DialogButton("다른 이름으로 저장"), new DialogButton("저장"), new DialogButton("취소", Cancel: true) }, 2);
+                if (c == 0) return SaveAs(confirmed: true);
+                if (c != 1) return false;
+            }
+        }
 
         bool renamed = _path == null ||
                        !string.Equals(Path.GetFullPath(_path), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase);
-        try
+        long changed = _map.Width == _original.Width && _map.Height == _original.Height ? MapStats.Compare(_original, _map).Item1 : -1;
+        while (true)
         {
-            string? backup = File.Exists(path) ? BackupFile(path) : null;
-            PgmIO.Write(path, _map);
-            string yamlNote = SaveYaml(path, renamed);
-
-            _path = path;
-            if (renamed || _metaChanged)
+            try
             {
-                // 새 경로이거나 좌표가 바뀐 경우 사이드카도 함께 저장
-                SaveProtect(true);
-                SaveDxfLink(true);
+                if (WriteFiles(path, renamed, changed)) return true;
             }
-
-            string historyNote = HistoryCheck.IsChecked == true ? WriteHistory(path) : "";
-
-            _original = _map.Clone();
-            _opLog.Clear();
-            _metaChanged = false;
-            _metaChangeReason = null;
-            SetDirty(false);
-            UpdateInfo();
-            SetStatus($"저장 완료: {Path.GetFileName(path)}" +
-                      (backup != null ? $"  (백업: _backup\\{Path.GetFileName(backup)})" : "") + yamlNote + historyNote);
-            return true;
+            catch (Exception ex)
+            {
+                if (!ShowFailure("저장하지 못했습니다", path, ex, canRetry: true)) return false;
+            }
         }
-        catch (Exception ex)
+    }
+
+    /// <summary>저장 전 확인할 내용 (없으면 바로 저장)</summary>
+    private List<(string Key, string Value)> SaveWarnings()
+    {
+        MapImage map = _map!, orig = _original!;
+        var list = new List<(string, string)>();
+        if (map.Width != orig.Width || map.Height != orig.Height)
+            list.Add(("크기 변경", $"{orig.Width} × {orig.Height} → {map.Width} × {map.Height} px" +
+                                  (_metaChangeReason != null ? $" ({_metaChangeReason})" : "") +
+                                  (_metaChangeReason != null && !_metaChangeReason.Contains("기울기")
+                                      ? "\n기존 영역의 월드 좌표는 그대로, yaml origin 갱신"
+                                      : "\n좌표계가 바뀌어 스테이션 · 경로를 다시 티칭해야 합니다.")));
+        if (_metaChanged && _meta.SourcePath == null)
+            list.Add(("yaml 없음", $"origin ({_meta.OriginX:0.###}, {_meta.OriginY:0.###})을 직접 반영해야 합니다."));
+        MapStats st = MapStats.Compute(map);
+        if (st.Invalid > 0) list.Add(("범위 외 값", $"255 값 {st.Invalid:N0} px"));
+        if (map.MaxVal < 255 && st.CountAbove(map.MaxVal) > 0) list.Add(("maxval 초과", $"{st.CountAbove(map.MaxVal):N0} px (maxval {map.MaxVal})"));
+        if (_reference != null && _updateMask != null)
         {
-            ShowError($"저장하지 못했습니다.\n{path}\n\n{ex.Message}");
-            return false;
+            long outside = UpdateCorrection.CountOutside(map, _reference, _updateMask);
+            if (outside > 0) list.Add(("영역 밖 변경", $"업데이트 영역 밖 변경 {outside:N0} px"));
         }
+        return list;
+    }
+
+    /// <summary>pgm · yaml · 사이드카 · 이력 쓰기. 성공하면 상태바에 요약</summary>
+    private bool WriteFiles(string path, bool renamed, long changed)
+    {
+        MapImage map = _map!;
+        string? backup = File.Exists(path) ? BackupFile(path) : null;
+        PgmIO.Write(path, map);
+        string yamlNote = SaveYaml(path, renamed);
+
+        _path = path;
+        if (renamed || _metaChanged)
+        {
+            // 새 경로이거나 좌표가 바뀐 경우 사이드카도 함께 저장
+            SaveProtect(true);
+            SaveDxfLink(true);
+        }
+
+        string historyNote = HistoryCheck.IsChecked == true ? WriteHistory(path) : "";
+
+        _original = map.Clone();
+        _opLog.Clear();
+        _metaChanged = false;
+        _metaChangeReason = null;
+        SetDirty(false);
+        UpdateInfo();
+        SetStatus($"저장 완료 · {Path.GetFileName(path)}" +
+                  (changed >= 0 ? $" · 변경 {changed:N0} px" : "") +
+                  (backup != null ? $" · 백업 _backup\\{Path.GetFileName(backup)}" : "") + yamlNote + historyNote);
+        return true;
     }
 
     /// <summary>기존 파일을 _backup 폴더에 시각 붙여 복사</summary>
@@ -470,7 +597,7 @@ public partial class MainWindow : Window
         if (_protect.Count > 0) sb.AppendLine($"보호 영역 {_protect.Count}개" + (ProtectEnableCheck.IsChecked == true ? " 적용 중" : " (적용 해제됨)"));
 
         sb.AppendLine();
-        sb.Append("저장할까요? 기존 파일은 _backup 폴더에 백업됩니다.");
+        sb.Append("기존 파일은 _backup 폴더에 백업됩니다.");
         return sb.ToString();
     }
 
@@ -499,6 +626,7 @@ public partial class MainWindow : Window
         if (_tracker == null) return 0;
         FlushEdit();
         ChangeSet? cs = _tracker.Commit();
+        _lastCommit = cs;
         if (cs == null) return 0;
         _undo.Push(cs);
         _opLog.Add($"{DateTime.Now:HH:mm:ss} {cs.Name} ({cs.Count:N0} px)");
@@ -531,18 +659,20 @@ public partial class MainWindow : Window
 
     private void Undo()
     {
-        if (_map == null || _dragging) return;
+        if (_map == null || _dragging || BusyBlocked()) return;
         ChangeSet? cs = _undo.Undo(_map);
         if (cs == null) return;
         AfterUndoRedo(cs, "실행 취소");
+        if (_applyUndo != null && ReferenceEquals(cs, _applyUndo.Change)) RevertApplyContext();
     }
 
     private void Redo()
     {
-        if (_map == null || _dragging) return;
+        if (_map == null || _dragging || BusyBlocked()) return;
         ChangeSet? cs = _undo.Redo(_map);
         if (cs == null) return;
         AfterUndoRedo(cs, "다시 실행");
+        if (_applyUndo != null && ReferenceEquals(cs, _applyUndo.Change)) RedoApplyContext();
     }
 
     private void AfterUndoRedo(ChangeSet cs, string action)
@@ -596,7 +726,7 @@ public partial class MainWindow : Window
         }
         else
         {
-            ResolutionBox.BorderBrush = ErrorBrush;
+            ResolutionBox.SetResourceReference(Control.BorderBrushProperty, "DangerTextBrush");
         }
     }
 
@@ -616,7 +746,7 @@ public partial class MainWindow : Window
         }
         else
         {
-            OccThresholdBox.BorderBrush = ErrorBrush;
+            OccThresholdBox.SetResourceReference(Control.BorderBrushProperty, "DangerTextBrush");
         }
     }
 
@@ -628,10 +758,33 @@ public partial class MainWindow : Window
         bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
         bool inText = Keyboard.FocusedElement is TextBox;
 
+        // F6 / Shift+F6: 도구 막대 → 도구 → 맵 → 오른쪽 패널
+        if (e.Key == Key.F6 && !ctrl)
+        {
+            CycleRegion(shift);
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.Escape && _busyCts != null && _busyCancellable)
+        {
+            _busyCts.Cancel();
+            e.Handled = true;
+            return;
+        }
+
         if (ctrl)
         {
             switch (e.Key)
             {
+                case Key.D1 or Key.NumPad1:
+                case Key.D2 or Key.NumPad2:
+                case Key.D3 or Key.NumPad3:
+                case Key.D4 or Key.NumPad4:
+                case Key.D5 or Key.NumPad5:
+                    int pane = e.Key is >= Key.D1 and <= Key.D5 ? e.Key - Key.D1 : e.Key - Key.NumPad1;
+                    PaneSegments[pane].IsChecked = true;
+                    e.Handled = true;
+                    break;
                 case Key.O:
                     OpenWithDialog();
                     e.Handled = true;
@@ -750,6 +903,29 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>F6 영역 이동</summary>
+    private void CycleRegion(bool back)
+    {
+        FrameworkElement[] regions = { ToolbarRoot, RailRoot, MapViewer, InspectorRoot };
+        int cur = Array.FindIndex(regions, r => r.IsKeyboardFocusWithin);
+        int next = cur < 0 ? (back ? regions.Length - 1 : 0) : (cur + (back ? regions.Length - 1 : 1)) % regions.Length;
+        switch (next)
+        {
+            case 0:
+                OpenButton.Focus();
+                break;
+            case 1:
+                ToolButton(_tool).Focus();
+                break;
+            case 2:
+                MapViewer.Focus();
+                break;
+            default:
+                PaneSegments.FirstOrDefault(r => r.IsChecked == true)?.Focus();
+                break;
+        }
+    }
+
     // ───────────── 상태 표시 ─────────────
 
     /// <summary>크기 · origin이 바뀌는 작업 기록 (저장 시 yaml 갱신, 저장 확인창 안내)</summary>
@@ -765,7 +941,33 @@ public partial class MainWindow : Window
     {
         _dirty = dirty;
         UpdateTitle();
+        RefreshStatusChips();
     }
+
+    /// <summary>상태바 칩: 기준 맵 · 맞출 맵 · 도면 · 보호 영역 · 저장 안 됨</summary>
+    private void RefreshStatusChips()
+    {
+        static void Set(Button chip, TextBlock text, string? value)
+        {
+            chip.Visibility = value != null ? Visibility.Visible : Visibility.Collapsed;
+            text.Text = value ?? "";
+        }
+        Set(RefChip, RefChipText, _map != null && _reference != null ? $"기준 맵 {_referenceName}" : null);
+        Set(SecondChip, SecondChipText, _map != null && _second != null ? $"맞출 맵 {Path.GetFileName(_secondPath)}" : null);
+        Set(DxfChip, DxfChipText, _map != null && _dxf != null ? $"도면 {Path.GetFileName(_dxfPath)}" : null);
+        Set(ProtectChip, ProtectChipText, _map != null && _protect.Count > 0
+            ? $"보호 영역 {_protect.Count} · {(ProtectEnableCheck.IsChecked == true ? "적용" : "해제")}"
+            : null);
+        DirtyChip.Visibility = _map != null && _dirty ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnChipReference(object sender, RoutedEventArgs e) => SegUpdate.IsChecked = true;
+
+    private void OnChipSecond(object sender, RoutedEventArgs e) => SegSecond.IsChecked = true;
+
+    private void OnChipDxf(object sender, RoutedEventArgs e) => SegDxf.IsChecked = true;
+
+    private void OnChipProtect(object sender, RoutedEventArgs e) => SegEdit.IsChecked = true;
 
     private void UpdateTitle()
     {
@@ -817,22 +1019,40 @@ public partial class MainWindow : Window
 
     private void UpdateZoomStatus() => StatusZoom.Text = MapViewer.HasImage ? $"{MapViewer.Zoom * 100:0}%" : "";
 
-    private void SetStatus(string message) => StatusMessage.Text = message;
-
-    private Brush Res(string key) => (Brush)FindResource(key);
-
-    private static Brush CreateFrozen(Color c)
+    /// <summary>상태바 문구. undo면 '되돌리기' 링크를 함께 (되돌릴 수 있는 작업을 확인 없이 실행한 뒤)</summary>
+    private void SetStatus(string message, bool undo = false)
     {
-        var b = new SolidColorBrush(c);
-        b.Freeze();
-        return b;
+        StatusMessage.Text = message;
+        StatusUndoButton.Visibility = undo && _undo.CanUndo ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void ShowError(string message) =>
-        MessageBox.Show(this, message, "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+    /// <summary>오류 안내 (예외 없음): 무엇(제목) · 왜와 해결(설명)</summary>
+    private void ShowError(string title, string message) =>
+        MessageDialog.Show(this, DialogKind.Error, title, message, null, null, new[] { new DialogButton("닫기", Cancel: true) }, 0);
 
-    private bool Confirm(string message, string title) =>
-        MessageBox.Show(this, message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
+    /// <summary>
+    /// 파일 작업 실패: 무엇(제목) · 파일 · 원인 · 해결 + 자세히(오류 원문 · 로그 위치).
+    /// canRetry면 '다시 시도'를 눌렀을 때 true
+    /// </summary>
+    private bool ShowFailure(string title, string? path, Exception ex, bool canRetry)
+    {
+        string log = ErrorReport.Write(ex, title + (path != null ? $" ({path})" : ""));
+        (string cause, string fix) = ErrorReport.Describe(ex);
+        var details = new List<(string, string)>();
+        if (path != null) details.Add(("파일", path));
+        details.Add(("원인", cause));
+        details.Add(("해결", fix));
+        DialogButton[] buttons = canRetry
+            ? new[] { new DialogButton("다시 시도", Primary: true), new DialogButton("닫기", Cancel: true) }
+            : new[] { new DialogButton("닫기", Cancel: true) };
+        int r = MessageDialog.Show(this, DialogKind.Error, title, "", details, $"{ex.GetType().Name}: {ex.Message}\n\n로그: {log}", buttons, 0);
+        return canRetry && r == 0;
+    }
+
+    /// <summary>되돌리기 어려운 작업 확인: 동사형 버튼 + 취소(기본 · Esc). 실행하면 true</summary>
+    private bool Confirm(string title, string message, string verb, IReadOnlyList<(string Key, string Value)>? details = null) =>
+        MessageDialog.Show(this, DialogKind.Warning, title, message, details, null,
+            new[] { new DialogButton(verb), new DialogButton("취소", Cancel: true) }, 1) == 0;
 
     // ───────────── 입력 파싱 ─────────────
 
@@ -859,7 +1079,7 @@ public partial class MainWindow : Window
             box.ClearValue(Control.BorderBrushProperty);
             return;
         }
-        box.BorderBrush = ErrorBrush;
+        box.SetResourceReference(Control.BorderBrushProperty, "DangerTextBrush");
         SetStatus($"{label}: {range} 범위의 숫자로 입력하세요.");
     }
 
