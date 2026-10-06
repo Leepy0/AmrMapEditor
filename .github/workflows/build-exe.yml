@@ -1,0 +1,61 @@
+name: Build EXE
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:   # Actions 탭에서 수동 실행
+
+concurrency:
+  group: build-exe-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # Release 갱신용
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      # .NET 런타임 미포함(framework-dependent) 단일 exe
+      - name: Publish
+        run: |
+          dotnet publish src/AmrMapEditor/AmrMapEditor.csproj \
+            -c Release -r win-x64 --self-contained false \
+            -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false \
+            -o publish
+
+      - name: 버전 확인 / 파일명 지정
+        id: exe
+        run: |
+          VER=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/AmrMapEditor/AmrMapEditor.csproj | head -1)
+          NAME="AmrMapEditor_v${VER}.exe"
+          mv publish/AmrMapEditor.exe "publish/$NAME"
+          ls -la publish
+          echo "path=publish/$NAME" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.exe.outputs.name }}
+          path: ${{ steps.exe.outputs.path }}
+
+      # 항상 같은 주소(latest)로 최신 exe 덮어쓰기
+      - name: Release(latest) 갱신
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --cleanup-tag -y || true
+          gh release create latest "${{ steps.exe.outputs.path }}" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Latest build" \
+            --notes "branch: ${GITHUB_REF_NAME} / commit: ${GITHUB_SHA::7} / run #${GITHUB_RUN_NUMBER} / .NET 10 Desktop Runtime 필요"
