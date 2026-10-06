@@ -26,7 +26,7 @@ AMR 맵(PGM) 전용 편집기. GIMP 대체용으로, 신규 맵 정리, 기존 �
 | 할 일 | 방법 |
 |---|---|
 | 테스트 빌드 | `main`에 push → Release `dev` 덮어쓰기 (자동 업데이트 대상 아님) |
-| 정식 배포 | csproj `<Version>`을 올려 커밋 → 같은 커밋에 `git tag v0.7.1` → `git push origin main v0.7.1`. 태그와 csproj 버전이 다르면 빌드가 실패한다. |
+| 정식 배포 | csproj `<Version>`을 올려 커밋 · push → 다음 중 하나<br>· Actions 탭 › Build EXE › Run workflow › **정식 배포** 체크 (그 버전으로 태그 · 릴리스 생성)<br>· `git tag v0.7.1` → `git push origin v0.7.1` (태그와 csproj 버전이 다르면 빌드 실패) |
 | 릴리스 노트 | 이전 태그 이후 커밋 메시지로 자동 작성 (프로그램의 업데이트 안내에 그대로 표시) |
 | 문제 버전 회수 | 해당 릴리스를 삭제하거나 pre-release로 바꾸면 바로 전 정식 버전이 최신이 된다. 이미 받은 PC는 정보 창에서 되돌린다. |
 

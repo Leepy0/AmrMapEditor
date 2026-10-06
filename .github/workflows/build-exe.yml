@@ -1,12 +1,19 @@
 name: Build EXE
 
 # main push   → 테스트 빌드: Release "dev" (prerelease) 덮어쓰기. 자동 업데이트 대상 아님
-# 태그 vX.Y.Z → 정식 배포: Release "vX.Y.Z" (Latest). 프로그램 자동 업데이트가 이것만 받음
+# 정식 배포   → Release "vX.Y.Z" (Latest). 프로그램 자동 업데이트가 이것만 받음
+#   1) 태그 vX.Y.Z push, 또는
+#   2) Actions 탭 › Run workflow › '정식 배포' 체크 (csproj 버전으로 태그 · 릴리스 생성)
 on:
   push:
     branches: [ main ]
     tags: [ 'v*' ]
-  workflow_dispatch:   # Actions 탭에서 수동 실행 (테스트 빌드)
+  workflow_dispatch:
+    inputs:
+      release:
+        description: '정식 배포 (csproj <Version>으로 vX.Y.Z 태그 · 릴리스 생성)'
+        type: boolean
+        default: false
 
 concurrency:
   group: build-exe-${{ github.ref }}
@@ -38,6 +45,15 @@ jobs:
             VER="${GITHUB_REF_NAME#v}"
             if [ "$VER" != "$BASE" ]; then
               echo "::error::태그($GITHUB_REF_NAME)와 csproj <Version>($BASE)이 다릅니다. csproj 버전을 올려 커밋한 뒤 그 커밋에 태그를 붙이세요."
+              exit 1
+            fi
+            echo "channel=release" >> "$GITHUB_OUTPUT"
+            echo "exe=AmrMapEditor.exe" >> "$GITHUB_OUTPUT"
+          elif [ "${{ inputs.release }}" = "true" ]; then
+            VER="$BASE"
+            TAGGED=$(git rev-parse -q --verify "refs/tags/v$VER^{commit}" || true)
+            if [ -n "$TAGGED" ] && [ "$TAGGED" != "$GITHUB_SHA" ]; then
+              echo "::error::v$VER 태그가 이미 다른 커밋에 있습니다. csproj <Version>을 올려 커밋한 뒤 다시 실행하세요."
               exit 1
             fi
             echo "channel=release" >> "$GITHUB_OUTPUT"
@@ -93,8 +109,10 @@ jobs:
           } > notes.md
           cat notes.md
           gh release delete "v$VER" -y 2>/dev/null || true   # 같은 태그 재실행 시 (태그는 유지)
+          # 태그 push면 그 태그로, 수동 실행이면 이 커밋에 태그 생성
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then TAGOPT=(--verify-tag); else TAGOPT=(--target "$GITHUB_SHA"); fi
           gh release create "v$VER" publish/AmrMapEditor.exe publish/AmrMapEditor.exe.sha256 \
-            --verify-tag --latest --title "v$VER" --notes-file notes.md
+            "${TAGOPT[@]}" --latest --title "v$VER" --notes-file notes.md
 
       # 테스트 빌드: 항상 같은 주소(dev)로 덮어쓰기
       - name: Release (테스트 dev)
