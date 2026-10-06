@@ -1,4 +1,4 @@
-# AMR Map Editor v0.6
+# AMR Map Editor v0.7
 
 AMR 맵(PGM) 전용 편집기. GIMP 대체용으로, 신규 맵 정리, 기존 맵 업데이트 보정, 나눠 그린 맵 합치기에 필요한 기능을 담았다.
 
@@ -6,13 +6,33 @@ AMR 맵(PGM) 전용 편집기. GIMP 대체용으로, 신규 맵 정리, 기존 �
 
 ## 다운로드
 
-`main`에 push하면 GitHub Actions(`build-exe.yml`)가 빌드해 Release `latest`를 덮어쓴다.
-- 최신 빌드: https://github.com/Leepy0/AmrMapEditor/releases/tag/latest
-- Windows x64 단일 exe (`AmrMapEditor_v<버전>.exe`), 실행하려면 .NET 10 Desktop Runtime 필요
+- **정식 버전**: https://github.com/Leepy0/AmrMapEditor/releases/latest/download/AmrMapEditor.exe
+- Windows x64 단일 exe. .NET이 포함돼 있어 설치 없이 아무 폴더에 두고 실행한다 (약 70 MB).
+- 브라우저로 처음 받으면 SmartScreen이 "알 수 없는 게시자"로 막을 수 있다 → "추가 정보 › 실행". 코드 서명을 하지 않아서이며, 이후 자동 업데이트로 받은 파일은 경고가 뜨지 않는다.
+- 테스트 빌드(main 최신, 자동 업데이트 대상 아님): https://github.com/Leepy0/AmrMapEditor/releases/download/dev/AmrMapEditor-dev.exe
+
+## 업데이트
+
+- 프로그램이 시작할 때 최신 정식 버전을 확인한다. 새 버전이 있으면 상태 표시줄에 **새 버전** 칩만 뜨고 작업을 방해하지 않는다. 오프라인 · 사내 프록시 차단 등으로 확인하지 못하면 조용히 넘어간다.
+- 칩을 누르면 변경 내용과 함께 **받기 / 이 버전 건너뛰기 / 나중에**를 고른다. 받은 파일은 SHA-256으로 검증한다.
+- 받아 두면 **프로그램을 닫을 때** 바뀐다. 저장하지 않은 변경이 없으면 **지금 다시 시작**으로 바로 바꿀 수도 있다.
+- 바꾸기 전 버전은 `AmrMapEditor.exe.old`로 한 세대 남긴다. 새 버전에 문제가 있으면 도구 막대 **정보(ⓘ) › 이전 버전으로 되돌리기**. 되돌린 버전은 다시 자동으로 받지 않는다.
+- 프로그램 폴더에 쓸 수 없으면(Program Files, 읽기 전용 공유 폴더) 자동으로 바꾸지 않고 릴리스 페이지를 안내한다. 문서 · 바탕화면 등 사용자 폴더에 두고 쓰는 것을 권장한다.
+- 정보 창에서 버전 · 빌드, 업데이트 확인, 시작할 때 자동 확인 끄기를 할 수 있다.
+- 확인은 GitHub API(비인증, 같은 인터넷 주소에서 시간당 60회)를 시작할 때 한 번 쓴다. 사용 기록은 보내지 않는다.
+
+### 배포 (관리자)
+
+| 할 일 | 방법 |
+|---|---|
+| 테스트 빌드 | `main`에 push → Release `dev` 덮어쓰기 (자동 업데이트 대상 아님) |
+| 정식 배포 | csproj `<Version>`을 올려 커밋 → 같은 커밋에 `git tag v0.7.1` → `git push origin main v0.7.1`. 태그와 csproj 버전이 다르면 빌드가 실패한다. |
+| 릴리스 노트 | 이전 태그 이후 커밋 메시지로 자동 작성 (프로그램의 업데이트 안내에 그대로 표시) |
+| 문제 버전 회수 | 해당 릴리스를 삭제하거나 pre-release로 바꾸면 바로 전 정식 버전이 최신이 된다. 이미 받은 PC는 정보 창에서 되돌린다. |
 
 ## 빌드 / 실행
 
-- .NET 10 SDK, Windows
+- .NET 10 SDK, Windows (직접 빌드한 exe는 '로컬 빌드'로 표시되고 자동 업데이트를 하지 않는다)
 - Visual Studio: `AmrMapEditor.slnx` 열고 실행
 - CLI: `dotnet run --project src/AmrMapEditor`
 - 외부 NuGet 패키지 없음 (순수 C# 구현)
@@ -294,9 +314,11 @@ src/AmrMapEditor/
   App.xaml                  색 토큰(라이트 기본값) · 컨트롤 스타일 · 아이콘
   Theme.cs                  라이트 / 다크 토큰 교체, 제목 표시줄
   MessageDialog.cs          공용 대화상자(동사형 버튼 · 기본 버튼 · Esc), 오류 원인 · 해결 · 로그
+  Updater.cs                업데이트 확인 · 받기(SHA-256) · exe 교체 · 되돌리기
   app.manifest              Per-Monitor V2 DPI
   MainWindow.xaml.cs        파일/저장/편집 공통/키보드/상태 표시줄
   MainWindow.Busy.cs        진행 표시 · 취소, 맞출 맵 반영 되돌리기 연동
+  MainWindow.AppUpdate.cs   업데이트 칩 · 안내 · 종료 시 적용 · 정보 창
   MainWindow.Tools.cs       도구, 폴리곤, 그리기 값, 선택 영역
   MainWindow.Update.cs      업데이트 보정
   MainWindow.Second.cs      맞추기 (맞출 맵 이동 · 자동 정렬 · 비교 · 반영 · 합치기)

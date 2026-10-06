@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net.Http;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -25,7 +27,8 @@ public sealed class MessageDialog : Window
     private readonly int _cancelIndex;
 
     private MessageDialog(DialogKind kind, string title, string message, IReadOnlyList<(string Key, string Value)>? details,
-                          string? more, IReadOnlyList<DialogButton> buttons, int defaultIndex)
+                          string? more, IReadOnlyList<DialogButton> buttons, int defaultIndex,
+                          string moreHeader, bool moreExpanded, bool moreMono)
     {
         Title = "AMR Map Editor";
         Width = 480;
@@ -111,13 +114,13 @@ public sealed class MessageDialog : Window
                 TextWrapping = TextWrapping.Wrap,
                 Height = double.NaN,
                 MaxHeight = 200,
-                FontFamily = new FontFamily("Cascadia Mono, Consolas"),
-                FontSize = 12,
+                FontFamily = moreMono ? new FontFamily("Cascadia Mono, Consolas") : this.FontFamily,
+                FontSize = moreMono ? 12 : 14,
                 VerticalContentAlignment = VerticalAlignment.Top,
                 Padding = new Thickness(8),
             };
             box.SetValue(ScrollViewer.VerticalScrollBarVisibilityProperty, ScrollBarVisibility.Auto);
-            var expander = new Expander { Header = "자세히", Content = box, Margin = new Thickness(0, 12, 0, 0) };
+            var expander = new Expander { Header = moreHeader, Content = box, IsExpanded = moreExpanded, Margin = new Thickness(0, 12, 0, 0) };
             expander.SetResourceReference(StyleProperty, "Disclosure");
             stack.Children.Add(expander);
         }
@@ -180,9 +183,10 @@ public sealed class MessageDialog : Window
     /// <summary>대화상자를 띄우고 누른 버튼 번호 반환 (Esc · ✕ = 취소 버튼 번호, 없으면 -1)</summary>
     public static int Show(Window? owner, DialogKind kind, string title, string message,
                            IReadOnlyList<(string Key, string Value)>? details, string? more,
-                           IReadOnlyList<DialogButton> buttons, int defaultIndex)
+                           IReadOnlyList<DialogButton> buttons, int defaultIndex,
+                           string moreHeader = "자세히", bool moreExpanded = false, bool moreMono = true)
     {
-        var d = new MessageDialog(kind, title, message, details, more, buttons, defaultIndex);
+        var d = new MessageDialog(kind, title, message, details, more, buttons, defaultIndex, moreHeader, moreExpanded, moreMono);
         if (owner != null && owner.IsVisible)
         {
             d.Owner = owner;
@@ -228,6 +232,11 @@ public static class ErrorReport
         const int SharingViolation = unchecked((int)0x80070020), LockViolation = unchecked((int)0x80070021), DiskFull = unchecked((int)0x80070070);
         return ex switch
         {
+            UpdateException u => (u.Message, u.Fix),
+            HttpRequestException =>
+                ("GitHub에 연결할 수 없습니다.", "인터넷 연결과 사내 프록시를 확인하세요. 회사망에서 github.com이 막혀 있으면 릴리스 페이지에서 직접 받으세요."),
+            TaskCanceledException or TimeoutException =>
+                ("응답이 없어 시간이 초과됐습니다.", "잠시 뒤 다시 시도하세요."),
             FileNotFoundException or DirectoryNotFoundException =>
                 ("파일이나 폴더를 찾을 수 없습니다.", "경로가 바뀌었거나 삭제되지 않았는지 확인하세요."),
             UnauthorizedAccessException =>

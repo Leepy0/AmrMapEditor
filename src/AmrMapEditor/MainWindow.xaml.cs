@@ -109,6 +109,7 @@ public partial class MainWindow : Window
         RefreshUpdateGuide();
         RefreshSecondUi();
         RefreshStatusChips();
+        InitAppUpdate();
     }
 
     private IntRect Full => _map?.Bounds ?? IntRect.Empty;
@@ -236,9 +237,11 @@ public partial class MainWindow : Window
         if (!ConfirmDiscard())
         {
             e.Cancel = true;
+            _restartAfterClose = false;
             return;
         }
         SaveSettings();
+        ApplyUpdateOnClose();   // 받아 둔 업데이트는 닫을 때 교체
     }
 
     private void OpenWithDialog()
@@ -942,6 +945,7 @@ public partial class MainWindow : Window
         _dirty = dirty;
         UpdateTitle();
         RefreshStatusChips();
+        _aboutRefresh?.Invoke();   // 정보 창의 '지금 다시 시작' · '되돌리기' 가능 여부
     }
 
     /// <summary>상태바 칩: 기준 맵 · 맞출 맵 · 도면 · 보호 영역 · 저장 안 됨</summary>
