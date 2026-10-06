@@ -4,6 +4,12 @@ AMR 맵(PGM) 전용 편집기. GIMP 대체용으로, 신규 맵 정리, 기존 �
 
 그림과 단계별 재생이 포함된 사용 안내는 `docs/guide.html`을 브라우저로 여세요.
 
+## 다운로드
+
+`main`에 push하면 GitHub Actions(`build-exe.yml`)가 빌드해 Release `latest`를 덮어쓴다.
+- 최신 빌드: https://github.com/Leepy0/AmrMapEditor/releases/tag/latest
+- Windows x64 단일 exe (`AmrMapEditor_v<버전>.exe`), 실행하려면 .NET 10 Desktop Runtime 필요
+
 ## 빌드 / 실행
 
 - .NET 10 SDK, Windows
