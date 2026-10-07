@@ -38,6 +38,7 @@ public static class Updater
 {
     public const string Repo = "Leepy0/AmrMapEditor";
     public const string AssetName = "AmrMapEditor.exe";
+    private const string ManifestName = "AmrMapEditor.json";
     public static string ReleasesPage => $"https://github.com/{Repo}/releases";
 
     /// <summary>최신 정식 버전 exe 고정 주소 (버전이 바뀌어도 같음, 브라우저로 직접 받기)</summary>
@@ -97,8 +98,68 @@ public static class Updater
 
     // ───────────── 확인 ─────────────
 
-    /// <summary>최신 정식 릴리스 (prerelease · draft 제외). 정식 릴리스가 없거나 exe가 없으면 null</summary>
+    /// <summary>
+    /// 최신 정식 릴리스 (prerelease · draft 제외). 정식 릴리스가 없거나 exe가 없으면 null.
+    /// 사내망은 api.github.com이 막혀 있어 github.com 주소(매니페스트 · 리다이렉트)를 먼저 쓰고 API는 마지막에
+    /// </summary>
     public static async Task<ReleaseInfo?> GetLatestAsync(CancellationToken ct)
+    {
+        Exception? first = null;
+        foreach (Func<CancellationToken, Task<ReleaseInfo?>> source in new Func<CancellationToken, Task<ReleaseInfo?>>[]
+                 { FromManifestAsync, FromRedirectAsync, FromApiAsync })
+        {
+            try
+            {
+                ReleaseInfo? r = await source(ct);
+                if (r != null) return r;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                first ??= ex;   // 다음 방법으로
+            }
+        }
+        if (first != null) throw first;
+        return null;
+    }
+
+    /// <summary>릴리스에 함께 올린 AmrMapEditor.json (버전 · SHA-256 · 크기 · 변경 내용). 없으면 null</summary>
+    private static async Task<ReleaseInfo?> FromManifestAsync(CancellationToken ct)
+    {
+        using HttpResponseMessage res = await Http.GetAsync($"https://github.com/{Repo}/releases/latest/download/{ManifestName}", ct);
+        if (res.StatusCode == HttpStatusCode.NotFound) return null;
+        res.EnsureSuccessStatusCode();
+        using JsonDocument doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct));
+        JsonElement m = doc.RootElement;
+        if (!TryParseVersion(Str(m, "version"), out Version version)) return null;
+        string tag = "v" + version.ToString(3);
+        string file = Str(m, "file") is { Length: > 0 } f ? f : AssetName;
+        string sha = Str(m, "sha256");
+        DateTimeOffset published = DateTimeOffset.TryParse(Str(m, "published"), out DateTimeOffset p) ? p : DateTimeOffset.Now;
+        return new ReleaseInfo(version, Str(m, "notes"), Str(m, "page") is { Length: > 0 } page ? page : $"{ReleasesPage}/tag/{tag}",
+            $"{ReleasesPage}/download/{tag}/{file}",
+            m.TryGetProperty("size", out JsonElement s) && s.ValueKind == JsonValueKind.Number ? s.GetInt64() : 0,
+            sha.Length == 64 ? sha.ToLowerInvariant() : null, $"{ReleasesPage}/download/{tag}/{file}.sha256", published);
+    }
+
+    /// <summary>매니페스트가 없는 릴리스: releases/latest → releases/tag/vX.Y.Z 로 넘어가는 주소에서 버전만 읽음</summary>
+    private static async Task<ReleaseInfo?> FromRedirectAsync(CancellationToken ct)
+    {
+        using HttpResponseMessage res = await Http.GetAsync($"{ReleasesPage}/latest", HttpCompletionOption.ResponseHeadersRead, ct);
+        res.EnsureSuccessStatusCode();
+        string final = res.RequestMessage?.RequestUri?.AbsolutePath ?? "";
+        int i = final.LastIndexOf("/tag/", StringComparison.Ordinal);
+        if (i < 0 || !TryParseVersion(Uri.UnescapeDataString(final[(i + 5)..]), out Version version)) return null;
+        string tag = "v" + version.ToString(3);
+        return new ReleaseInfo(version, "", $"{ReleasesPage}/tag/{tag}", $"{ReleasesPage}/download/{tag}/{AssetName}", 0,
+            null, $"{ReleasesPage}/download/{tag}/{AssetName}.sha256", DateTimeOffset.Now);
+    }
+
+    /// <summary>GitHub API (집 · 사외망)</summary>
+    private static async Task<ReleaseInfo?> FromApiAsync(CancellationToken ct)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{Repo}/releases/latest");
         req.Headers.Accept.ParseAdd("application/vnd.github+json");
@@ -135,35 +196,62 @@ public static class Updater
     /// <summary>새 exe 받기 → SHA-256 검증. 이미 받아 둔 같은 파일이 있으면 그대로 씀</summary>
     public static async Task<PendingUpdate> DownloadAsync(ReleaseInfo r, IProgress<double> progress, CancellationToken ct)
     {
-        string expected = r.Sha256 ?? await FetchShaAsync(r.Sha256Url, ct)
-            ?? throw new UpdateException("릴리스에 검증용 SHA-256 정보가 없습니다.", "릴리스 페이지에서 직접 받으세요.");
+        string expected = await ExpectedShaAsync(r, ct);
         Directory.CreateDirectory(UpdateDir);
         string target = Path.Combine(UpdateDir, $"AmrMapEditor_{r.Version.ToString(3)}.exe");
-        if (File.Exists(target) && await Task.Run(() => HashFile(target), ct) == expected.ToLowerInvariant())
+        if (File.Exists(target) && await Task.Run(() => HashFile(target), ct) == expected)
             return new PendingUpdate(r.Version, target, expected);
+        await DownloadFileAsync(r, target, expected, progress, ct);
+        return new PendingUpdate(r.Version, target, expected);
+    }
 
+    /// <summary>
+    /// 지정한 위치에 최신 exe 저장 (다른 PC에 옮기거나 직접 바꿀 때).
+    /// 프로그램이 직접 받은 파일은 '인터넷에서 받음' 표시가 없어 SmartScreen 경고가 뜨지 않음
+    /// </summary>
+    public static async Task DownloadToAsync(ReleaseInfo r, string path, IProgress<double> progress, CancellationToken ct)
+    {
+        string expected = await ExpectedShaAsync(r, ct);
+        await DownloadFileAsync(r, path, expected, progress, ct);
+    }
+
+    private static async Task<string> ExpectedShaAsync(ReleaseInfo r, CancellationToken ct) =>
+        (r.Sha256 ?? await FetchShaAsync(r.Sha256Url, ct)
+            ?? throw new UpdateException("릴리스에 검증용 SHA-256 정보가 없습니다.", "릴리스 페이지에서 직접 받으세요.")).ToLowerInvariant();
+
+    /// <summary>임시 파일(.partial)로 받고 SHA-256이 맞을 때만 target으로 옮김</summary>
+    private static async Task DownloadFileAsync(ReleaseInfo r, string target, string expected, IProgress<double> progress, CancellationToken ct)
+    {
         string part = target + ".partial";
-        using (HttpResponseMessage res = await Http.GetAsync(r.AssetUrl, HttpCompletionOption.ResponseHeadersRead, ct))
+        try
         {
-            res.EnsureSuccessStatusCode();
-            long total = res.Content.Headers.ContentLength ?? r.Size;
-            await using Stream src = await res.Content.ReadAsStreamAsync(ct);
-            await using var dst = new FileStream(part, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
-            var buf = new byte[81920];
-            long done = 0;
-            double reported = -1;
-            int n;
-            while ((n = await src.ReadAsync(buf, ct)) > 0)
+            using (HttpResponseMessage res = await Http.GetAsync(r.AssetUrl, HttpCompletionOption.ResponseHeadersRead, ct))
             {
-                await dst.WriteAsync(buf.AsMemory(0, n), ct);
-                done += n;
-                double pct = total > 0 ? done * 100.0 / total : 0;
-                if (pct - reported >= 1)
+                res.EnsureSuccessStatusCode();
+                long total = res.Content.Headers.ContentLength ?? r.Size;
+                await using Stream src = await res.Content.ReadAsStreamAsync(ct);
+                await using var dst = new FileStream(part, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+                var buf = new byte[81920];
+                long done = 0;
+                double reported = -1;
+                int n;
+                while ((n = await src.ReadAsync(buf, ct)) > 0)
                 {
-                    progress.Report(pct);
-                    reported = pct;
+                    await dst.WriteAsync(buf.AsMemory(0, n), ct);
+                    done += n;
+                    double pct = total > 0 ? done * 100.0 / total : 0;
+                    if (pct - reported >= 1)
+                    {
+                        progress.Report(pct);
+                        reported = pct;
+                    }
                 }
             }
+        }
+        catch (Exception)
+        {
+            TryDelete(part);   // 취소 · 끊김: 반쯤 받은 파일을 남기지 않음
+            throw;
         }
 
         string actual = await Task.Run(() => HashFile(part), ct);
@@ -173,7 +261,6 @@ public static class Updater
             throw new UpdateException("받은 파일이 손상됐습니다 (SHA-256 불일치).", "네트워크 상태를 확인하고 다시 받으세요.");
         }
         File.Move(part, target, overwrite: true);
-        return new PendingUpdate(r.Version, target, expected.ToLowerInvariant());
     }
 
     private static async Task<string?> FetchShaAsync(string? url, CancellationToken ct)
@@ -307,6 +394,19 @@ public static class Updater
         catch (Exception)
         {
             // 정리 실패는 무시
+        }
+    }
+
+    /// <summary>탐색기에서 파일 선택해 보여주기</summary>
+    public static void ShowInFolder(string path)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+        }
+        catch (Exception)
+        {
+            // 탐색기 실행 실패는 무시
         }
     }
 

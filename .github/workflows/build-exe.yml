@@ -89,29 +89,59 @@ jobs:
           path: publish/${{ steps.ver.outputs.exe }}
 
       # 정식 배포: 이전 태그 이후 커밋 메시지로 릴리스 노트
-      - name: Release (정식 vX.Y.Z)
+      # 정식 배포 1) 이전 태그 이후 커밋 메시지로 변경 내용
+      - name: 변경 내용 (정식)
         if: steps.ver.outputs.channel == 'release'
         env:
-          GH_TOKEN: ${{ github.token }}
           VER: ${{ steps.ver.outputs.ver }}
         run: |
           PREV=$(git describe --tags --abbrev=0 --match 'v*' "${GITHUB_SHA}^" 2>/dev/null || true)
           RANGE="${PREV:+$PREV..}$GITHUB_SHA"
+          git log --no-merges --pretty='tformat:%s%n%n%b' $RANGE | sed -E '/^(Co-Authored-By|Claude-Session):/d' | cat -s > changes.md
           {
             echo "Windows x64 단일 exe · 설치 없이 실행 (.NET 포함)"
             echo "실행 중인 프로그램은 시작할 때 이 버전을 확인하고, 받아 두면 닫을 때 바뀝니다."
             echo
-            git log --no-merges --pretty='tformat:%s%n%n%b' $RANGE | sed -E '/^(Co-Authored-By|Claude-Session):/d' | cat -s
+            cat changes.md
             if [ -n "$PREV" ]; then
               echo
               echo "전체 변경: https://github.com/$GITHUB_REPOSITORY/compare/$PREV...v$VER"
             fi
           } > notes.md
           cat notes.md
+
+      # 정식 배포 2) 업데이트 확인용 매니페스트. 프로그램은 api.github.com 대신
+      #    github.com/.../releases/latest/download/AmrMapEditor.json 으로 확인 (사내망에서 API가 막혀도 동작)
+      - name: 매니페스트 (정식)
+        if: steps.ver.outputs.channel == 'release'
+        shell: pwsh
+        env:
+          VER: ${{ steps.ver.outputs.ver }}
+        run: |
+          $exe = 'publish/AmrMapEditor.exe'
+          $m = [ordered]@{
+            version   = $env:VER
+            file      = 'AmrMapEditor.exe'
+            sha256    = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+            size      = (Get-Item $exe).Length
+            published = (Get-Date).ToUniversalTime().ToString('o')
+            page      = "https://github.com/$env:GITHUB_REPOSITORY/releases/tag/v$env:VER"
+            notes     = (Get-Content changes.md -Raw -Encoding utf8).Trim()
+          }
+          $m | ConvertTo-Json | Set-Content publish/AmrMapEditor.json -Encoding utf8NoBOM
+          Get-Content publish/AmrMapEditor.json
+
+      # 정식 배포 3) Release (Latest)
+      - name: Release (정식 vX.Y.Z)
+        if: steps.ver.outputs.channel == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VER: ${{ steps.ver.outputs.ver }}
+        run: |
           gh release delete "v$VER" -y 2>/dev/null || true   # 같은 태그 재실행 시 (태그는 유지)
           # 태그 push면 그 태그로, 수동 실행이면 이 커밋에 태그 생성
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then TAGOPT=(--verify-tag); else TAGOPT=(--target "$GITHUB_SHA"); fi
-          gh release create "v$VER" publish/AmrMapEditor.exe publish/AmrMapEditor.exe.sha256 \
+          gh release create "v$VER" publish/AmrMapEditor.exe publish/AmrMapEditor.exe.sha256 publish/AmrMapEditor.json \
             "${TAGOPT[@]}" --latest --title "v$VER" --notes-file notes.md
 
       # 테스트 빌드: 항상 같은 주소(dev)로 덮어쓰기

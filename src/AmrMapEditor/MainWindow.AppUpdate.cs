@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Microsoft.Win32;
 
 namespace AmrMapEditor;
 
@@ -20,7 +21,8 @@ public partial class MainWindow
     private const string SkipKey = "UpdateSkip";
 
     private UpdateState _updState;
-    private ReleaseInfo? _updRelease;      // 최신 정식 릴리스 (확인 결과)
+    private ReleaseInfo? _updRelease;      // 지금보다 새 정식 릴리스 (확인 결과)
+    private ReleaseInfo? _updLatest;       // 최신 정식 릴리스 (같은 버전이어도, '파일로 저장'용)
     private PendingUpdate? _updPending;    // 받아 둔 업데이트 (종료할 때 적용)
     private CancellationTokenSource? _updCts;
     private double _updProgress;
@@ -76,6 +78,7 @@ public partial class MainWindow
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             ReleaseInfo? r = await Updater.GetLatestAsync(cts.Token);
+            _updLatest = r;
             _updCheckError = null;
             _updCheckedAt = DateTime.Now;
             if (r == null || r.Version <= Updater.CurrentVersion)
@@ -152,17 +155,17 @@ public partial class MainWindow
     {
         string v = r.Version.ToString(3);
         string notes = string.IsNullOrWhiteSpace(r.Notes) ? "변경 내용이 없습니다." : r.Notes.Trim();
-        var details = new[] { ("크기", $"{r.Size / 1048576.0:0} MB"), ("배포", $"{r.Published.LocalDateTime:yyyy-MM-dd}") };
+        var details = new[] { ("크기", SizeText(r)), ("배포", $"{r.Published.LocalDateTime:yyyy-MM-dd}") };
 
         if (!Updater.CanSelfUpdate || !Updater.CanWriteExeDir())
         {
             string why = !Updater.CanSelfUpdate
                 ? "로컬 빌드는 자동으로 바꾸지 않습니다."
                 : $"프로그램이 있는 폴더({Path.GetDirectoryName(Updater.ExePath)})에 쓸 수 없어 자동으로 바꿀 수 없습니다.";
-            int c = MessageDialog.Show(owner, DialogKind.Info, $"새 버전 {v}", why + " 브라우저로 받아 지금 쓰는 exe와 바꿔 주세요.", details, notes,
-                new[] { new DialogButton("최신 버전 받기", Primary: true), new DialogButton("닫기", Cancel: true) }, 0,
+            int c = MessageDialog.Show(owner, DialogKind.Info, $"새 버전 {v}", why + " 파일로 저장한 뒤 지금 쓰는 exe와 바꿔 주세요.", details, notes,
+                new[] { new DialogButton("파일로 저장…", Primary: true), new DialogButton("닫기", Cancel: true) }, 0,
                 "변경 내용", moreExpanded: true, moreMono: false);
-            if (c == 0) Updater.OpenPage(Updater.DownloadUrl);
+            if (c == 0) SaveLatestToFile(owner);
             return;
         }
 
@@ -228,6 +231,83 @@ public partial class MainWindow
             RefreshUpdateUi();
         }
         if (retry) StartUpdateDownload(r);
+    }
+
+    private static string SizeText(ReleaseInfo r) => r.Size > 0 ? $"{r.Size / 1048576.0:0} MB" : "약 60 MB";
+
+    /// <summary>
+    /// 최신 정식 exe를 원하는 위치에 저장 (다른 PC에 옮기기 · 로컬 빌드 · 쓰기 권한 없는 폴더).
+    /// 프로그램이 직접 받으므로 '인터넷에서 받음' 표시가 없어 SmartScreen 경고가 뜨지 않음
+    /// </summary>
+    private async void SaveLatestToFile(Window owner)
+    {
+        if (_busyCts != null)
+        {
+            SetStatus("진행 중인 작업이 끝난 뒤 다시 시도하세요.");
+            return;
+        }
+        ReleaseInfo? r = _updLatest;
+        if (r == null)
+        {
+            SetStatus("최신 버전을 확인하는 중…");
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                r = await Updater.GetLatestAsync(cts.Token);
+            }
+            catch (Exception ex)
+            {
+                SetStatus("");
+                ShowFailure("최신 버전을 확인하지 못했습니다", null, ex, canRetry: false);
+                return;
+            }
+            SetStatus("");
+            if (r == null)
+            {
+                ShowError("받을 정식 버전이 없습니다", "아직 정식 배포된 버전이 없습니다. 릴리스 페이지를 확인하세요.");
+                return;
+            }
+            _updLatest = r;
+        }
+
+        string v = r.Version.ToString(3);
+        string downloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+        var dlg = new SaveFileDialog
+        {
+            Title = $"AMR Map Editor {v} 저장",
+            FileName = Updater.AssetName,
+            Filter = "프로그램 (*.exe)|*.exe",
+            InitialDirectory = Directory.Exists(downloads) ? downloads : Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+        };
+        if (dlg.ShowDialog(owner) != true) return;
+        string path = dlg.FileName;
+        if (Updater.ExePath != null && string.Equals(Path.GetFullPath(path), Path.GetFullPath(Updater.ExePath), StringComparison.OrdinalIgnoreCase))
+        {
+            ShowError("실행 중인 파일에는 덮어쓸 수 없습니다", "다른 위치에 저장하세요. 지금 쓰는 exe를 바꾸려면 업데이트 받기를 쓰세요.");
+            return;
+        }
+
+        CancellationToken ct = BeginBusy($"{v} 버전 받는 중", lockEditing: false, cancellable: true, showProgress: true);
+        bool retry = false;
+        try
+        {
+            await Updater.DownloadToAsync(r, path, new Progress<double>(ReportBusy), ct);
+            SetStatus($"{v} 버전을 저장했습니다: {path}");
+            Updater.ShowInFolder(path);
+        }
+        catch (OperationCanceledException)
+        {
+            SetStatus("저장을 취소했습니다.");
+        }
+        catch (Exception ex)
+        {
+            retry = ShowFailure("최신 버전을 저장하지 못했습니다", path, ex, canRetry: true);
+        }
+        finally
+        {
+            EndBusy();
+        }
+        if (retry) SaveLatestToFile(owner);
     }
 
     // ───────────── 적용 ─────────────
@@ -419,13 +499,13 @@ public partial class MainWindow
         rollback.Click += (_, _) => RollbackAndRestart();
         root.Children.Add(rollback);
 
-        // 직접 받기: 사내망처럼 자동 확인이 막힌 곳에서도 브라우저로 받을 수 있게 고정 주소 연결
+        // 직접 받기: 다른 PC에 옮기거나 직접 바꿀 때. 프로그램이 받은 파일은 SmartScreen 경고가 없음
         var directHeader = new TextBlock { Text = "직접 받기", Margin = new Thickness(0, 24, 0, 8) };
         directHeader.SetResourceReference(FrameworkElement.StyleProperty, "SectionHeader");
         root.Children.Add(directHeader);
         var directText = new TextBlock
         {
-            Text = "자동 확인이 안 되는 곳(사내망 등)에서는 브라우저로 최신 정식 버전을 받아 지금 쓰는 exe와 바꿔 쓰세요.",
+            Text = "다른 PC에 옮기거나 exe를 직접 바꿀 때 씁니다. '파일로 저장'은 프로그램이 직접 받아 SmartScreen 경고가 뜨지 않습니다. 브라우저로 받으면 처음 실행할 때 경고가 뜰 수 있습니다.",
             FontSize = 12,
             TextWrapping = TextWrapping.Wrap,
             LineHeight = 18,
@@ -434,7 +514,7 @@ public partial class MainWindow
         root.Children.Add(directText);
 
         var links = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
-        var download = new Button { ToolTip = Updater.DownloadUrl, Margin = new Thickness(0, 0, 16, 0) };
+        var download = new Button { ToolTip = "최신 정식 버전을 받아 원하는 위치에 저장합니다.", Margin = new Thickness(0, 0, 16, 0) };
         download.SetResourceReference(FrameworkElement.StyleProperty, "LinkButton");
         var downloadIcon = new System.Windows.Shapes.Path
         {
@@ -447,9 +527,9 @@ public partial class MainWindow
         downloadIcon.SetResourceReference(FrameworkElement.StyleProperty, "Icon");
         var downloadContent = new StackPanel { Orientation = Orientation.Horizontal };
         downloadContent.Children.Add(downloadIcon);
-        downloadContent.Children.Add(new TextBlock { Text = "최신 버전 받기", VerticalAlignment = VerticalAlignment.Center });
+        downloadContent.Children.Add(new TextBlock { Text = "파일로 저장…", VerticalAlignment = VerticalAlignment.Center });
         download.Content = downloadContent;
-        download.Click += (_, _) => Updater.OpenPage(Updater.DownloadUrl);
+        download.Click += (_, _) => SaveLatestToFile(w);
         links.Children.Add(download);
 
         var copy = new Button { Content = "링크 복사", ToolTip = "다운로드 주소를 복사합니다 (동료에게 전달할 때).", Margin = new Thickness(0, 0, 16, 0) };
@@ -469,6 +549,11 @@ public partial class MainWindow
         };
         copy.MouseLeave += (_, _) => copy.Content = "링크 복사";
         links.Children.Add(copy);
+
+        var browser = new Button { Content = "브라우저로 받기", ToolTip = Updater.DownloadUrl, Margin = new Thickness(0, 0, 16, 0) };
+        browser.SetResourceReference(FrameworkElement.StyleProperty, "LinkButton");
+        browser.Click += (_, _) => Updater.OpenPage(Updater.DownloadUrl);
+        links.Children.Add(browser);
 
         var page = new Button { Content = "릴리스 페이지 (변경 내용)" };
         page.SetResourceReference(FrameworkElement.StyleProperty, "LinkButton");
@@ -523,7 +608,7 @@ public partial class MainWindow
             else if (_updState == UpdateState.Available && _updRelease != null)
             {
                 ReleaseInfo r = _updRelease;
-                status.Text = $"새 버전 {r.Version.ToString(3)} · {r.Size / 1048576.0:0} MB · {r.Published.LocalDateTime:yyyy-MM-dd} 배포";
+                status.Text = $"새 버전 {r.Version.ToString(3)} · {SizeText(r)} · {r.Published.LocalDateTime:yyyy-MM-dd} 배포";
                 primary.Content = "변경 내용 · 받기";
                 onPrimary = () => ShowUpdateOffer(r, w);
             }
@@ -538,10 +623,10 @@ public partial class MainWindow
             }
             else
             {
-                status.Text = _updCheckError != null ? $"확인하지 못했습니다 · {_updCheckError} 아래 '최신 버전 받기'로 직접 받을 수 있습니다."
+                status.Text = _updCheckError != null ? $"확인하지 못했습니다 · {_updCheckError} 아래 '브라우저로 받기'로 받을 수 있습니다."
                     : _updCheckedAt is DateTime t ? $"최신 버전입니다 ({t:HH:mm} 확인)"
                     : Updater.CanSelfUpdate ? "아직 확인하지 않았습니다."
-                    : "로컬 빌드는 자동으로 업데이트하지 않습니다. 정식 버전은 아래 '최신 버전 받기'로 받으세요.";
+                    : "로컬 빌드는 자동으로 업데이트하지 않습니다. 정식 버전은 아래 '파일로 저장'으로 받으세요.";
                 primary.Content = "업데이트 확인";
                 onPrimary = async () => await CheckForUpdateAsync(manual: true);
             }
