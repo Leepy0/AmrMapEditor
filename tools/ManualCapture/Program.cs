@@ -189,6 +189,29 @@ internal static class Program
             Shot("10-clean-tab", "InspectorRoot", "SegClean");
         });
 
+        // 작은 기둥(L자)은 노이즈 조건에도 걸리므로 노이즈 제거 전에 사각형으로 정리
+        Step("기둥 정리", () =>
+        {
+            Calibrate();
+            Key((byte)'C');
+            Thread.Sleep(300);
+            Record("pillar");
+            Thread.Sleep(400);
+            foreach ((double px, double py) in new[] { (117.0, 101.5), (217.0, 108.5), (317.0, 115.5), (106.0, 251.5), (306.0, 265.5) })
+            {
+                (double sx, double sy) = M(px, py);
+                (int tx, int ty) = DarkNear((int)sx, (int)sy, 14);
+                MoveTo(tx, ty, 450);
+                Thread.Sleep(150);
+                LeftClick();
+                Thread.Sleep(500);
+            }
+            Thread.Sleep(900);
+            StopRecord();
+            Park();
+            Shot("09-pillar");
+        });
+
         Step("노이즈", () =>
         {
             Record("noise");
@@ -267,29 +290,6 @@ internal static class Program
             Shot("15-straighten", "StatusMessage");
         });
 
-        Step("기둥 정리", () =>
-        {
-            Key((byte)'F');
-            Thread.Sleep(700);
-            Calibrate();
-            Key((byte)'C');
-            Thread.Sleep(300);
-            Record("pillar");
-            Thread.Sleep(400);
-            foreach ((double px, double py) in new[] { (117.0, 101.5), (217.0, 108.5), (317.0, 115.5), (106.0, 251.5), (306.0, 265.5) })
-            {
-                (double qx, double qy) = D(px, py);
-                (double sx, double sy) = M(qx, qy);
-                (int tx, int ty) = DarkNear((int)sx, (int)sy, 14);
-                MoveTo(tx, ty, 450);
-                Thread.Sleep(150);
-                LeftClick();
-                Thread.Sleep(500);
-            }
-            Thread.Sleep(900);
-            StopRecord();
-        });
-
         Step("닫기", () =>
         {
             Key(VK.Control, (byte)'W');
@@ -364,11 +364,16 @@ internal static class Program
             ClickText("후보 찾기", 0);
             WaitIdle(1500);
             Park();
-            Shot("26-update-dup", "DupResults", "DupList");
-            ClickText("체크한 항목 복원", 0);
-            WaitIdle(1200);
-            Park();
-            Shot("27-update-dup-restored", "StatusMessage");
+            Shot("26-update-dup", "DupResults", "DupList", "DupEmpty");
+            // 옮겨서 합치기를 했으면 이중 벽이 이미 없어져 후보가 0개일 수 있다
+            try
+            {
+                ClickText("체크한 항목 복원", 0);
+                WaitIdle(1200);
+                Park();
+                Shot("27-update-dup-restored", "StatusMessage");
+            }
+            catch (Exception ex) { Say("dup restore skipped: " + ex.Message); }
         });
 
         Step("마무리 노이즈", () =>
