@@ -487,7 +487,15 @@ internal static class Program
             Thread.Sleep(800);
             Shot("43-about", Dialog: dlg);
             Key(VK.Escape);
-            Thread.Sleep(500);
+            for (int i = 0; i < 10 && FindDialog() != null; i++) Thread.Sleep(200);
+            AutomationElement? still = FindDialog();
+            Check(still == null, "정보 창 Esc", still == null ? "Esc로 닫힘" : "Esc로 닫히지 않음 → 닫기 버튼으로 닫음");
+            if (still != null)
+            {
+                ClickButtonIn(still, "닫기");
+                Thread.Sleep(500);
+                Check(FindDialog() == null, "정보 창 닫기 버튼", FindDialog() == null ? "닫힘" : "닫히지 않음");
+            }
         });
     }
 
