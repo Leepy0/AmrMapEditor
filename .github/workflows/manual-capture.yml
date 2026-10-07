@@ -1,0 +1,65 @@
+name: Manual Capture
+
+# 사용 설명서(docs/manual) 스크린샷 · 동영상(GIF)을 실제 앱 화면으로 다시 만든다.
+#   Actions 탭 › Manual Capture › Run workflow
+#   → 아티팩트 manual-images 를 받아 docs/manual/images 에 덮어쓰고 커밋
+# 화면이 바뀌는 업데이트를 한 뒤에 실행하면 된다.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'tools/ManualCapture/**'
+      - '.github/workflows/manual-capture.yml'
+
+concurrency:
+  group: manual-capture-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 화면 해상도 1920 × 1080
+        shell: pwsh
+        continue-on-error: true
+        run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
+
+      - name: Build
+        run: |
+          dotnet build src/AmrMapEditor/AmrMapEditor.csproj -c Release -o build/app
+          dotnet build tools/ManualCapture/ManualCapture.csproj -c Release -o build/capture
+
+      - name: Capture
+        run: build/capture/ManualCapture.exe build/app/AmrMapEditor.exe samples capture-out
+
+      - name: 번호 표시 · GIF
+        run: |
+          pip install pillow
+          python tools/ManualCapture/make_assets.py capture-out manual-images
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: manual-images
+          path: manual-images
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capture-raw
+          path: capture-out
+          retention-days: 3
