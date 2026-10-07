@@ -18,9 +18,10 @@ GIF_WIDTH = 960
 #   marks: [(요소 id | 'status', 번호 또는 None)]  → 주황 상자 + 번호
 #   crop:  'dialog' | 요소 id 목록(합친 범위) | None(창 전체)
 SPEC = {
-    '03-main': {'marks': [('ToolbarRoot', 1), ('RailRoot', 2), ('MapViewer', 3), ('InspectorRoot', 4), ('status', 5)]},
+    # 번호 위치(상자 안 비율)는 글자를 가리지 않는 빈 곳
+    '03-main': {'marks': [('ToolbarRoot', 1, (0.25, 0.5)), ('RailRoot', 2, (0.5, 0.88)), ('MapViewer', 3, (0.035, 0.045)),
+                          ('InspectorRoot', 4, (0.86, 0.115)), ('status', 5, (0.45, 0.5))]},
     '04-tooltip': {'crop_box': ('ToolWall', 0, -12, 400, 124)},
-    '02-open-dialog': {'crop': 'dialog'},
     '13-deskew-confirm': {'crop': 'dialog'},
     '16-close-confirm': {'crop': 'dialog'},
     '29-save-confirm': {'crop': 'dialog'},
@@ -38,6 +39,9 @@ SPEC = {
     '40-tab-second': {'crop': ['InspectorRoot']},
     '41-tab-dxf': {'crop': ['InspectorRoot']},
 }
+
+# 설명서에 쓰지 않는 것 (파일 대화상자는 Windows 언어에 따라 달라짐)
+SKIP = {'02-open-dialog'}
 
 # GIF별 잘라낼 범위 (창 기준 비율 x0, y0, x1, y1) · 기본은 창 전체
 GIF_SPEC = {}
@@ -69,21 +73,23 @@ def badge(d, cx, cy, n, r=15):
     d.text((cx - (b[2] - b[0]) / 2 - b[0], cy - (b[3] - b[1]) / 2 - b[1]), t, fill=(255, 255, 255), font=f)
 
 
-def mark(img, box, n):
+def mark(img, box, n, at=None):
     d = ImageDraw.Draw(img)
     x0, y0, x1, y1 = box
     d.rounded_rectangle((x0 + 2, y0 + 2, x1 - 2, y1 - 2), radius=6, outline=ACCENT, width=4)
     if n is not None:
-        badge(d, min(x0 + 22, x1 - 20), min(y0 + 22, y1 - 20), n)
+        fx, fy = at or (0, 0)
+        badge(d, x0 + (x1 - x0) * fx if at else min(x0 + 22, x1 - 20),
+              y0 + (y1 - y0) * fy if at else min(y0 + 22, y1 - 20), n)
 
 
 def process_shot(src, dst, name, rects):
     img = Image.open(src).convert('RGB')
     spec = SPEC.get(name, {})
-    for key, n in spec.get('marks', []):
+    for key, n, *at in spec.get('marks', []):
         box = rect_of(rects, key, img)
         if box:
-            mark(img, box, n)
+            mark(img, box, n, at[0] if at else None)
     crop = spec.get('crop')
     if crop == 'dialog' and 'dialog' in rects:
         x, y, w, h = rects['dialog']
@@ -153,7 +159,7 @@ def main():
     shots = {s['name']: s['rects'] for s in json.load(open(os.path.join(src, 'shots.json'), encoding='utf-8'))}
     for f in sorted(os.listdir(os.path.join(src, 'shots'))):
         name = f[:-4]
-        if name.startswith('_'):
+        if name.startswith('_') or name in SKIP:
             continue
         process_shot(os.path.join(src, 'shots', f), os.path.join(out, f), name, shots.get(name, {}))
         print('shot', f)
