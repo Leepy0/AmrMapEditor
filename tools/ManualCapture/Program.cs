@@ -115,7 +115,7 @@ internal static class Program
             Park();
             Shot("03-main", "ToolbarRoot", "RailRoot", "MapViewer", "InspectorRoot", "ScopeBar", "SegEdit", "SegUpdate",
                 "SegSecond", "SegClean", "SegDxf", "DisplayStandard", "StatusPos", "StatusZoom", "StatusMessage", "OpenButton",
-                "SaveButton", "UndoButton", "ThemeToggle", "RailSwatchButton", "ToolBrush", "ToolPillar", "FileNameText", "ValueFree");
+                "SaveButton", "UndoButton", "ThemeToggle", "StatusBar", "RailSwatchButton", "ToolBrush", "ToolPillar", "FileNameText", "ValueFree");
         });
 
         Step("툴팁", () =>
@@ -535,7 +535,34 @@ internal static class Program
         _win.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, id))
         ?? throw new Exception($"요소 '{id}' 없음");
 
-    private static WRect RectOf(string id) => ById(id).Current.BoundingRectangle;
+    /// <summary>
+    /// 요소 위치. Border · 맵 컨트롤처럼 UI Automation에 나오지 않는 영역은 주변 요소 위치로 계산한다
+    /// (도구 막대 높이 48 · 상태 표시줄 28 · 도구 열은 도구 버튼 + 8 · 오른쪽 패널은 세그먼트 탭 기준)
+    /// </summary>
+    private static WRect RectOf(string id)
+    {
+        switch (id)
+        {
+            case "ToolbarRoot" or "RailRoot" or "MapViewer" or "InspectorRoot" or "InspectorBody" or "StatusBar":
+                Rectangle w = WinRect();
+                WRect open = ById("OpenButton").Current.BoundingRectangle;
+                WRect brush = ById("ToolBrush").Current.BoundingRectangle;
+                WRect seg = ById("SegEdit").Current.BoundingRectangle;
+                double tbTop = open.Top - 8, tbBottom = tbTop + 48, stTop = w.Bottom - 29;
+                double railRight = brush.Right + 8, inspLeft = seg.Left - 15;
+                return id switch
+                {
+                    "ToolbarRoot" => new WRect(w.Left, tbTop, w.Width, 48),
+                    "RailRoot" => new WRect(w.Left, tbBottom, railRight - w.Left, stTop - tbBottom),
+                    "MapViewer" => new WRect(railRight, tbBottom, inspLeft - railRight, stTop - tbBottom),
+                    "InspectorRoot" => new WRect(inspLeft, tbBottom, w.Right - inspLeft, stTop - tbBottom),
+                    "InspectorBody" => new WRect(inspLeft, seg.Bottom + 52, w.Right - inspLeft, stTop - seg.Bottom - 52),
+                    _ => new WRect(w.Left, stTop, w.Width, w.Bottom - stTop),
+                };
+            default:
+                return ById(id).Current.BoundingRectangle;
+        }
+    }
 
     /// <summary>보이는 탭에서 글자가 name인 n번째 요소(버튼 또는 버튼 안 글자)를 누른다</summary>
     private static void ClickText(string name, int n)
@@ -711,7 +738,7 @@ internal static class Program
         {
             try
             {
-                WRect r = ById(id).Current.BoundingRectangle;
+                WRect r = RectOf(id);
                 if (!r.IsEmpty) rects[id] = new[] { (int)r.Left - area.Left, (int)r.Top - area.Top, (int)r.Width, (int)r.Height };
             }
             catch { }
