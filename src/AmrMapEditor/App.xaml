@@ -421,6 +421,39 @@
             </Setter>
         </Style>
 
+        <!-- 크기 변경 기준 위치 (3 × 3 칸, 선택 칸 = 기존 맵 자리) -->
+        <Style x:Key="AnchorRadio" TargetType="RadioButton">
+            <Setter Property="GroupName" Value="ResizeAnchor" />
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Margin" Value="1" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" CornerRadius="4" BorderThickness="1"
+                                BorderBrush="{DynamicResource ControlBorderBrush}" Background="{DynamicResource ControlBrush}">
+                            <Rectangle x:Name="Dot" Width="12" Height="8" RadiusX="2" RadiusY="2"
+                                       Fill="{DynamicResource AccentBrush}" Visibility="Collapsed" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="Dot" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- 그리기 값 색상 칩 (Background = 칩 색) -->
         <Style x:Key="SwatchRadio" TargetType="RadioButton">
             <Setter Property="GroupName" Value="DrawValue" />

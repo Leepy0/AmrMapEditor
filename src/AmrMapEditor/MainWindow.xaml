@@ -461,7 +461,7 @@
                                 </StackPanel>
                             </Border>
 
-                            <TextBlock Style="{StaticResource PaneHeader}" Text="회전 · 원점" />
+                            <TextBlock Style="{StaticResource PaneHeader}" Text="회전 · 크기 · 원점" />
                             <Border Style="{StaticResource Card}">
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal">
@@ -501,6 +501,54 @@
                                         <TextBlock Grid.Column="2" Text="°" Style="{StaticResource Unit}" />
                                         <Button Grid.Column="3" Content="회전" Margin="8,0,0,0" Padding="12,0" Click="OnRotateAngle" />
                                     </Grid>
+                                    <Border Style="{StaticResource Hairline}" />
+                                    <!-- 캔버스 크기: 픽셀 크기 그대로, 테두리를 늘리거나 자름 -->
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="맵 크기" Style="{StaticResource RowLabel}" />
+                                        <ContentControl Style="{StaticResource InfoTip}"
+                                                        ToolTip="맵 전체 크기를 픽셀 단위로 바꿉니다 (해상도 · 축척은 그대로).&#x0a;늘어난 곳은 Unknown으로 채우고, 줄이면 기준 위치 반대쪽부터 잘립니다.&#x0a;기준 위치 = 기존 맵이 놓일 자리. 내용의 월드 좌표는 그대로 남도록 origin을 맞춥니다.&#x0a;보호 영역 · 도면 · 맞출 맵도 같이 옮깁니다. Ctrl+Z로 되돌릴 수 있습니다." />
+                                    </StackPanel>
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="ResizeWBox" Style="{StaticResource NumberBox}" Width="Auto"
+                                                 ToolTip="폭 (px, 1 ~ 20000)" />
+                                        <TextBlock Grid.Column="1" Text="×" Style="{StaticResource Unit}" Margin="8,0" />
+                                        <TextBox x:Name="ResizeHBox" Grid.Column="2" Style="{StaticResource NumberBox}" Width="Auto"
+                                                 ToolTip="높이 (px, 1 ~ 20000)" />
+                                        <TextBlock Grid.Column="3" Text="px" Style="{StaticResource Unit}" />
+                                    </Grid>
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <UniformGrid Rows="3" Columns="3" ToolTip="기준 위치: 기존 맵이 놓일 자리 (기본 왼쪽 아래 = yaml origin 쪽)">
+                                            <RadioButton x:Name="AnchorTL" Style="{StaticResource AnchorRadio}" Tag="00" AutomationProperties.Name="기준 왼쪽 위" />
+                                            <RadioButton x:Name="AnchorT" Style="{StaticResource AnchorRadio}" Tag="10" AutomationProperties.Name="기준 위" />
+                                            <RadioButton x:Name="AnchorTR" Style="{StaticResource AnchorRadio}" Tag="20" AutomationProperties.Name="기준 오른쪽 위" />
+                                            <RadioButton x:Name="AnchorL" Style="{StaticResource AnchorRadio}" Tag="01" AutomationProperties.Name="기준 왼쪽" />
+                                            <RadioButton x:Name="AnchorC" Style="{StaticResource AnchorRadio}" Tag="11" AutomationProperties.Name="기준 가운데" />
+                                            <RadioButton x:Name="AnchorR" Style="{StaticResource AnchorRadio}" Tag="21" AutomationProperties.Name="기준 오른쪽" />
+                                            <RadioButton x:Name="AnchorBL" Style="{StaticResource AnchorRadio}" Tag="02" IsChecked="True" AutomationProperties.Name="기준 왼쪽 아래" />
+                                            <RadioButton x:Name="AnchorB" Style="{StaticResource AnchorRadio}" Tag="12" AutomationProperties.Name="기준 아래" />
+                                            <RadioButton x:Name="AnchorBR" Style="{StaticResource AnchorRadio}" Tag="22" AutomationProperties.Name="기준 오른쪽 아래" />
+                                        </UniformGrid>
+                                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="기준 위치" Style="{StaticResource Caption}" />
+                                            <TextBlock x:Name="ResizeCurrentText" Style="{StaticResource Caption}" Margin="0,4,0,0"
+                                                       Foreground="{DynamicResource TertiaryLabelBrush}" />
+                                        </StackPanel>
+                                    </Grid>
+                                    <UniformGrid Columns="2" Margin="0,8,0,0">
+                                        <Button Margin="0,0,4,0" Click="OnResizeApply" Content="크기 적용" ToolTip="입력한 폭 × 높이로 바꿉니다." />
+                                        <Button Margin="4,0,0,0" Padding="4,0" Click="OnResizeFit" Content="선택으로 자르기"
+                                                ToolTip="사각형(M) · 폴리곤(P)으로 선택한 범위에 딱 맞게 자릅니다." />
+                                    </UniformGrid>
                                     <Border Style="{StaticResource Hairline}" />
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="원점 (yaml origin)" Style="{StaticResource RowLabel}" />

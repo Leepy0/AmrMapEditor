@@ -10,7 +10,7 @@ using AmrMapEditor.Models;
 namespace AmrMapEditor;
 
 /// <summary>
-/// 맵 회전 · 원점 변경, 그리고 크기 · 좌표가 바뀌는 작업(회전 · 기울기 보정 · 합치기 · 원점)의 실행 취소.
+/// 맵 회전 · 캔버스 크기 · 원점 변경, 그리고 크기 · 좌표가 바뀌는 작업(회전 · 기울기 보정 · 크기 · 합치기 · 원점)의 실행 취소.
 /// 픽셀 단위 실행 취소로는 되돌릴 수 없으므로 작업 전 문서 상태(맵 · 원점 · 보호 영역 · 도면 · 맞출 맵 · 기준 맵 ·
 /// 그 시점까지의 실행 취소 기록)를 통째로 보관했다가 Ctrl+Z로 바꿔 끼움
 /// </summary>
@@ -390,7 +390,139 @@ public partial class MainWindow
         OriginYBox.Text = open ? _meta.OriginY.ToString("0.###", CultureInfo.InvariantCulture) : "";
         OriginXBox.ClearValue(System.Windows.Controls.Control.BorderBrushProperty);
         OriginYBox.ClearValue(System.Windows.Controls.Control.BorderBrushProperty);
+        ResizeWBox.Text = open ? _map!.Width.ToString(CultureInfo.InvariantCulture) : "";
+        ResizeHBox.Text = open ? _map!.Height.ToString(CultureInfo.InvariantCulture) : "";
+        ResizeWBox.ClearValue(System.Windows.Controls.Control.BorderBrushProperty);
+        ResizeHBox.ClearValue(System.Windows.Controls.Control.BorderBrushProperty);
+        ResizeCurrentText.Text = open ? $"지금 {_map!.Width} × {_map.Height} px" : "";
         UpdateOriginMark();
+    }
+
+    // ───────────── 캔버스 크기 ─────────────
+
+    private const int MaxCanvasSide = 20000;
+
+    /// <summary>선택한 기준 위치 (0 · 1 · 2, 0 · 1 · 2). 기본 왼쪽 아래</summary>
+    private (int X, int Y) ResizeAnchor()
+    {
+        foreach (System.Windows.Controls.RadioButton rb in new[]
+                 { AnchorTL, AnchorT, AnchorTR, AnchorL, AnchorC, AnchorR, AnchorBL, AnchorB, AnchorBR })
+            if (rb.IsChecked == true && rb.Tag is string t && t.Length == 2)
+                return (t[0] - '0', t[1] - '0');
+        return (0, 2);
+    }
+
+    private void OnResizeFit(object sender, RoutedEventArgs e)
+    {
+        if (_map == null) return;
+        // 선택 영역이 있으면 그 범위로 자르기 (기준 위치 무시)
+        if (_selection != null)
+        {
+            IntRect b = _selection.Bounds.Intersect(_map.Bounds);
+            if (b.IsEmpty) return;
+            if (b.Width == _map.Width && b.Height == _map.Height)
+            {
+                SetStatus("선택 범위가 맵 전체와 같습니다.");
+                return;
+            }
+            ResizeCanvas(b.Width, b.Height, -b.X, -b.Y, "맵 크기 변경 (선택으로 자르기)");
+            return;
+        }
+        SetStatus("자를 범위를 사각형(M)이나 폴리곤(P)으로 먼저 선택하세요.");
+    }
+
+    private void OnResizeApply(object sender, RoutedEventArgs e)
+    {
+        if (_map == null) return;
+        if (!ReadInt(ResizeWBox, 1, MaxCanvasSide, "폭", out int w)) return;
+        if (!ReadInt(ResizeHBox, 1, MaxCanvasSide, "높이", out int h)) return;
+        if (w == _map.Width && h == _map.Height)
+        {
+            SetStatus("크기가 지금과 같습니다.");
+            return;
+        }
+        (int ax, int ay) = ResizeAnchor();
+        (int ox, int oy) = MapCanvas.AnchorOffset(_map.Width, _map.Height, w, h, ax, ay);
+        ResizeCanvas(w, h, ox, oy, "맵 크기 변경");
+    }
+
+    /// <summary>
+    /// 캔버스 크기 변경 (픽셀 크기는 그대로). 기존 픽셀 (0, 0)을 (offX, offY)에 놓음.
+    /// 내용의 월드 좌표가 그대로 남도록 origin을 맞추고, 보호 영역 · 도면 · 맞출 맵도 같이 옮김. 실행 취소 가능
+    /// </summary>
+    private bool ResizeCanvas(int newW, int newH, int offX, int offY, string name)
+    {
+        if (_map == null) return false;
+        if (_reference != null)
+        {
+            ShowError("기준 맵을 연 상태에서는 크기를 바꿀 수 없습니다",
+                "업데이트 보정은 기존 좌표를 유지해야 합니다. 기준 맵을 닫은 뒤 다시 시도하세요.");
+            return false;
+        }
+        if ((long)newW * newH > 400_000_000L)
+        {
+            ShowError("맵이 너무 큽니다", $"{newW} × {newH} px는 다룰 수 없습니다. 4억 픽셀 이하로 정하세요.");
+            return false;
+        }
+        if (FrameBusy()) return false;
+
+        CancelDrag();
+        CancelPolygon();
+        CancelAlign(true);
+        CancelPair();
+        CancelOriginPick();
+
+        CanvasResult r;
+        using (new WaitCursor()) r = MapCanvas.Resize(_map, newW, newH, offX, offY);
+        PushFrame(name);
+        int oldW = _map.Width, oldH = _map.Height;
+        double res = _meta.Resolution;
+
+        // 내용의 월드 좌표 유지: 왼쪽 아래 기준 origin 보정
+        double ox = _meta.OriginX - offX * res;
+        double oy = _meta.OriginY - (newH - (oldH + offY)) * res;
+
+        var bounds = new IntRect(0, 0, newW, newH);
+        var moved = new List<NamedRegion>();
+        foreach (NamedRegion p in _protect)
+        {
+            PixelRegion? pr = ShiftRegion(p.Region, offX, offY, bounds);
+            if (pr != null) moved.Add(new NamedRegion(p.Name, pr));
+        }
+        int lostProtect = _protect.Count - moved.Count;
+        _protect.Clear();
+        foreach (NamedRegion p in moved) _protect.Add(p);
+        if (_dxfPlacement != null)
+        {
+            _dxfPlacement.OffsetX += offX;
+            _dxfPlacement.OffsetY += offY;
+            UpdateDxfPlacementUi();
+        }
+        if (_second != null)
+        {
+            _secondPose = _secondPose.Translate(offX, offY);
+            _secondHistory.Clear();
+            _secondDiff = null;
+            _secondRegions.Clear();
+            ClearAlignResult();
+        }
+        var areas = new List<PixelRegion>();
+        foreach (PixelRegion a in _updateAreas)
+            if (ShiftRegion(a, offX, offY, bounds) is PixelRegion sa) areas.Add(sa);
+        _updateAreas.Clear();
+        _updateAreas.AddRange(areas);
+
+        _map = r.Image;
+        _meta.OriginX = ox;
+        _meta.OriginY = oy;
+        MarkMetaChanged("크기 변경");
+        _opLog.Add($"{DateTime.Now:HH:mm:ss} {name}: {oldW}×{oldH} → {newW}×{newH} (기존 (0, 0) → ({offX}, {offY}))");
+        ReloadDocument(sizeChanged: true);
+
+        string lost = r.LostKnown > 0 ? $" · ⚠ 잘린 곳에 그려진 픽셀 {r.LostKnown:N0}개" : "";
+        string lostP = lostProtect > 0 ? $" · 보호 영역 {lostProtect}개가 범위 밖이라 빠짐" : "";
+        SetStatus($"{name}: {oldW} × {oldH} → {newW} × {newH} px · 내용의 월드 좌표는 그대로 (origin {ox:0.###}, {oy:0.###}){lost}{lostP}", undo: true);
+        return true;
     }
 
     private void UpdateOriginMark()

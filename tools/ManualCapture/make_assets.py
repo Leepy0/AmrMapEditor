@@ -25,6 +25,7 @@ SPEC = {
     '14-deskew-done': {'marks': [('status', None)]},
     '17-origin': {'marks': [('OriginXBox', None), ('OriginYBox', None)]},
     '18-rotate': {'marks': [('status', None)]},
+    '19-resize': {'marks': [('ResizeWBox', None), ('ResizeHBox', None), ('status', None)]},
     '16-close-confirm': {'crop': 'dialog'},
     '29-save-confirm': {'crop': 'dialog'},
     '43-about': {'crop': 'dialog'},

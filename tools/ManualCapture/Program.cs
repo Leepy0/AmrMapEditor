@@ -335,6 +335,28 @@ internal static class Program
             Say("redo: " + StatusText());
         });
 
+        Step("맵 크기", () =>
+        {
+            int w0 = int.Parse(BoxValue("ResizeWBox")), h0 = int.Parse(BoxValue("ResizeHBox"));
+            int w1 = w0 + 100, h1 = h0 + 60;
+            SetBoxValue("ResizeWBox", w1.ToString());
+            SetBoxValue("ResizeHBox", h1.ToString());
+            ClickText("크기 적용", 0);
+            WaitIdle(1500);
+            string msg = StatusText();
+            Check(msg.StartsWith("맵 크기 변경", StringComparison.Ordinal) && msg.Contains($"→ {w1} × {h1} px"), "맵 크기", msg);
+            Check(BoxValue("ResizeWBox") == w1.ToString() && BoxValue("ResizeHBox") == h1.ToString(), "맵 크기 입력칸",
+                $"{BoxValue("ResizeWBox")} × {BoxValue("ResizeHBox")}");
+            Key((byte)'F');
+            Thread.Sleep(700);
+            Park();
+            Shot("19-resize", "ResizeWBox", "ResizeHBox", "StatusMessage", "MapViewer");
+            Key(VK.Control, (byte)'Z');
+            WaitIdle(1500);
+            Check(StatusText().StartsWith("실행 취소", StringComparison.Ordinal) && BoxValue("ResizeWBox") == w0.ToString(),
+                "크기 실행 취소", $"{StatusText()} / {BoxValue("ResizeWBox")} × {BoxValue("ResizeHBox")}");
+        });
+
         Step("닫기", () =>
         {
             Key(VK.Control, (byte)'W');
@@ -873,6 +895,18 @@ internal static class Program
     {
         try { return ById("StatusMessage").Current.Name ?? ""; }
         catch { return ""; }
+    }
+
+    /// <summary>입력칸 값 읽기 · 쓰기 (ValuePattern)</summary>
+    private static string BoxValue(string id) =>
+        ((ValuePattern)ById(id).GetCurrentPattern(ValuePattern.Pattern)).Current.Value ?? "";
+
+    private static void SetBoxValue(string id, string value)
+    {
+        AutomationElement el = ById(id);
+        EnsureVisible(el);
+        ((ValuePattern)el.GetCurrentPattern(ValuePattern.Pattern)).SetValue(value);
+        Thread.Sleep(150);
     }
 
     /// <summary>동작 확인: 결과를 Actions 주석(annotation)으로 남김</summary>
