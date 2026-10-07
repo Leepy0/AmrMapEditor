@@ -38,7 +38,7 @@ public partial class MainWindow : Window
 
     // 편집
     private EditTracker? _tracker;
-    private readonly UndoStack _undo = new();
+    private UndoStack _undo = new();   // 크기 · 좌표가 바뀌는 작업마다 새로 시작 (이전 것은 문서 상태로 보관)
     private readonly List<string> _opLog = new();   // 저장 시 이력 파일에 남길 작업 목록
     private uint[] _lut = MapPalettes.Create(MapDisplayMode.Standard);
 
@@ -278,6 +278,8 @@ public partial class MainWindow : Window
         _metaChangeReason = null;
         _tracker = new EditTracker(map);
         _undo.Clear();
+        ClearFrames();
+        CancelOriginPick();
         _applyUndo = null;
         _opLog.Clear();
 
@@ -340,6 +342,8 @@ public partial class MainWindow : Window
         _metaChangeReason = null;
         _tracker = null;
         _undo.Clear();
+        ClearFrames();
+        CancelOriginPick();
         _applyUndo = null;
         _opLog.Clear();
 
@@ -449,7 +453,7 @@ public partial class MainWindow : Window
                                       ? "\n기존 영역의 월드 좌표는 그대로, yaml origin 갱신"
                                       : "\n좌표계가 바뀌어 스테이션 · 경로를 다시 티칭해야 합니다.")));
         if (_metaChanged && _meta.SourcePath == null)
-            list.Add(("yaml 없음", $"origin ({_meta.OriginX:0.###}, {_meta.OriginY:0.###})을 직접 반영해야 합니다."));
+            list.Add(("yaml 생성", $"yaml이 없어 origin ({_meta.OriginX:0.###}, {_meta.OriginY:0.###}) · 해상도 {_meta.Resolution} m/px로 새로 만듭니다."));
         MapStats st = MapStats.Compute(map);
         if (st.Invalid > 0) list.Add(("범위 외 값", $"255 값 {st.Invalid:N0} px"));
         if (map.MaxVal < 255 && st.CountAbove(map.MaxVal) > 0) list.Add(("maxval 초과", $"{st.CountAbove(map.MaxVal):N0} px (maxval {map.MaxVal})"));
@@ -510,9 +514,15 @@ public partial class MainWindow : Window
     {
         string? source = _meta.SourcePath;
         if (source == null || !File.Exists(source))
-            return _metaChanged
-                ? $"  ⚠ yaml 없음: origin ({_meta.OriginX:0.###}, {_meta.OriginY:0.###})을 직접 반영하세요"
-                : "";
+        {
+            if (!_metaChanged) return "";
+            // yaml이 없는데 원점 · 크기가 바뀜 → 같은 이름으로 새로 만듦
+            string created = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".", Path.GetFileNameWithoutExtension(path) + ".yaml");
+            if (File.Exists(created)) BackupFile(created);
+            File.WriteAllText(created, _meta.ToYaml(Path.GetFileName(path)));
+            _meta.SourcePath = created;
+            return $"  · yaml 생성: {Path.GetFileName(created)}";
+        }
 
         string target = renamed
             ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".", Path.GetFileNameWithoutExtension(path) + ".yaml")
@@ -632,6 +642,7 @@ public partial class MainWindow : Window
         _lastCommit = cs;
         if (cs == null) return 0;
         _undo.Push(cs);
+        _frameRedo.Clear();   // 새 편집 → 되돌렸던 회전 · 합치기 등은 다시 실행 불가
         _opLog.Add($"{DateTime.Now:HH:mm:ss} {cs.Name} ({cs.Count:N0} px)");
         SetDirty(true);
         UpdateDiffStats();
@@ -664,7 +675,11 @@ public partial class MainWindow : Window
     {
         if (_map == null || _dragging || BusyBlocked()) return;
         ChangeSet? cs = _undo.Undo(_map);
-        if (cs == null) return;
+        if (cs == null)
+        {
+            UndoFrame();   // 이 문서 상태의 픽셀 기록을 다 되돌렸으면 회전 · 합치기 등 이전 상태로
+            return;
+        }
         AfterUndoRedo(cs, "실행 취소");
         if (_applyUndo != null && ReferenceEquals(cs, _applyUndo.Change)) RevertApplyContext();
     }
@@ -673,7 +688,11 @@ public partial class MainWindow : Window
     {
         if (_map == null || _dragging || BusyBlocked()) return;
         ChangeSet? cs = _undo.Redo(_map);
-        if (cs == null) return;
+        if (cs == null)
+        {
+            RedoFrame();
+            return;
+        }
         AfterUndoRedo(cs, "다시 실행");
         if (_applyUndo != null && ReferenceEquals(cs, _applyUndo.Change)) RedoApplyContext();
     }
@@ -690,10 +709,10 @@ public partial class MainWindow : Window
 
     private void UpdateUndoButtons()
     {
-        UndoButton.IsEnabled = _undo.CanUndo;
-        RedoButton.IsEnabled = _undo.CanRedo;
-        UndoButton.ToolTip = _undo.UndoName != null ? $"Ctrl+Z · {_undo.UndoName}" : "Ctrl+Z";
-        RedoButton.ToolTip = _undo.RedoName != null ? $"Ctrl+Y · {_undo.RedoName}" : "Ctrl+Y";
+        UndoButton.IsEnabled = CanUndoAny;
+        RedoButton.IsEnabled = CanRedoAny;
+        UndoButton.ToolTip = UndoNameAny != null ? $"Ctrl+Z · {UndoNameAny}" : "Ctrl+Z";
+        RedoButton.ToolTip = RedoNameAny != null ? $"Ctrl+Y · {RedoNameAny}" : "Ctrl+Y";
     }
 
     // ───────────── 표시 ─────────────
@@ -725,6 +744,7 @@ public partial class MainWindow : Window
             _meta.Resolution = r;
             ResolutionBox.ClearValue(Control.BorderBrushProperty);
             UpdateUnitLabels();
+            UpdateOriginMark();
             UpdateSelectionUi();
         }
         else
@@ -882,7 +902,8 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 break;
             case Key.Escape:
-                if (_alignStep > 0) CancelAlign(true);
+                if (_originPick) CancelOriginPick();
+                else if (_alignStep > 0) CancelAlign(true);
                 else if (_pairStep > 0) CancelPair();
                 else if (_polyPoints.Count > 0) CancelPolygon();
                 else if (_dragging && _tool is EditTool.Line or EditTool.Rect or EditTool.Select or EditTool.Wall)
@@ -983,6 +1004,7 @@ public partial class MainWindow : Window
     private void UpdateInfo()
     {
         bool open = _map != null;
+        RefreshOriginUi();
         EmptyState.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
         InspectorBody.IsEnabled = open;
         SaveButton.IsEnabled = open;
@@ -1027,7 +1049,7 @@ public partial class MainWindow : Window
     private void SetStatus(string message, bool undo = false)
     {
         StatusMessage.Text = message;
-        StatusUndoButton.Visibility = undo && _undo.CanUndo ? Visibility.Visible : Visibility.Collapsed;
+        StatusUndoButton.Visibility = undo && CanUndoAny ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>오류 안내 (예외 없음): 무엇(제목) · 왜와 해결(설명)</summary>

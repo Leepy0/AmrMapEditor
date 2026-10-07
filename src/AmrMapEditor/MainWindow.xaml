@@ -461,6 +461,82 @@
                                 </StackPanel>
                             </Border>
 
+                            <TextBlock Style="{StaticResource PaneHeader}" Text="회전 · 원점" />
+                            <Border Style="{StaticResource Card}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="맵 회전" Style="{StaticResource RowLabel}" />
+                                        <ContentControl Style="{StaticResource InfoTip}"
+                                                        ToolTip="맵 전체를 돌립니다. 90° 단위는 픽셀 손실이 없습니다.&#x0a;월드 (0, 0) 지점은 맵에서 같은 곳에 남고, 보호 영역 · 도면 · 맞출 맵도 같이 돕니다.&#x0a;좌표계가 바뀌므로 스테이션 · 경로는 다시 티칭해야 합니다. Ctrl+Z로 되돌릴 수 있습니다." />
+                                    </StackPanel>
+                                    <UniformGrid Columns="3" Margin="0,8,0,0">
+                                        <Button Margin="0,0,4,0" Padding="4,0" Click="OnRotateLeft" ToolTip="반시계 방향으로 90° 회전">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Rotate}" RenderTransformOrigin="0.5,0.5">
+                                                    <Path.RenderTransform>
+                                                        <ScaleTransform ScaleX="-1" />
+                                                    </Path.RenderTransform>
+                                                </Path>
+                                                <TextBlock Text="90°" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Margin="4,0" Padding="4,0" Click="OnRotateRight" ToolTip="시계 방향으로 90° 회전">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Rotate}" />
+                                                <TextBlock Text="90°" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Margin="4,0,0,0" Padding="4,0" Click="OnRotate180" Content="180°" ToolTip="180° 회전" />
+                                    </UniformGrid>
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="각도" Style="{StaticResource RowLabel}" />
+                                        <TextBox x:Name="RotateAngleBox" Grid.Column="1" Style="{StaticResource NumberBox}" Text="0"
+                                                 ToolTip="+ = 반시계, − = 시계 방향 (−180 ~ 180)&#x0a;90° 단위가 아니면 벽에 계단이 생길 수 있습니다 (벽 직선화로 정리)." />
+                                        <TextBlock Grid.Column="2" Text="°" Style="{StaticResource Unit}" />
+                                        <Button Grid.Column="3" Content="회전" Margin="8,0,0,0" Padding="12,0" Click="OnRotateAngle" />
+                                    </Grid>
+                                    <Border Style="{StaticResource Hairline}" />
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="원점 (yaml origin)" Style="{StaticResource RowLabel}" />
+                                        <ContentControl Style="{StaticResource InfoTip}"
+                                                        ToolTip="맵 왼쪽 아래 픽셀의 월드 좌표(m)입니다. 맵 위 빨강(x) · 초록(y) 화살표가 월드 (0, 0)입니다.&#x0a;'맵에서 지정'은 클릭한 지점이 월드 (0, 0)이 되도록 바꿉니다 (스테이션 · 충전기 등).&#x0a;픽셀은 그대로이고, 저장할 때 yaml에 반영합니다 (없으면 새로 만듦). Ctrl+Z로 되돌릴 수 있습니다." />
+                                    </StackPanel>
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="X" Style="{StaticResource RowLabel}" Margin="0,0,8,0" />
+                                        <TextBox x:Name="OriginXBox" Grid.Column="1" Style="{StaticResource NumberBox}" Width="Auto" />
+                                        <TextBlock Grid.Column="2" Text="m" Style="{StaticResource Unit}" />
+                                        <TextBlock Grid.Column="3" Text="Y" Style="{StaticResource RowLabel}" Margin="16,0,8,0" />
+                                        <TextBox x:Name="OriginYBox" Grid.Column="4" Style="{StaticResource NumberBox}" Width="Auto" />
+                                        <TextBlock Grid.Column="5" Text="m" Style="{StaticResource Unit}" />
+                                    </Grid>
+                                    <UniformGrid Columns="2" Margin="0,8,0,0">
+                                        <Button Margin="0,0,4,0" Click="OnApplyOrigin" Content="값 적용" ToolTip="입력한 X · Y로 origin을 바꿉니다." />
+                                        <Button Margin="4,0,0,0" Click="OnPickOrigin" ToolTip="맵을 클릭하면 그 지점이 월드 (0, 0)이 됩니다.  Esc = 취소">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Target}" />
+                                                <TextBlock Text="맵에서 지정" />
+                                            </StackPanel>
+                                        </Button>
+                                    </UniformGrid>
+                                    <CheckBox x:Name="OriginShowCheck" Style="{StaticResource Switch}" Content="맵에 원점 표시" IsChecked="True" Margin="0,8,0,0"
+                                              Click="OnOriginShowToggle" />
+                                </StackPanel>
+                            </Border>
+
                             <TextBlock Style="{StaticResource PaneHeader}" Text="맵 설정" />
                             <Border Style="{StaticResource Card}">
                                 <StackPanel>
@@ -1091,7 +1167,7 @@
                                             </Border>
                                             <TextBlock Style="{StaticResource CardTitle}" Text="합쳐서 큰 맵 만들기" />
                                             <ContentControl Style="{StaticResource InfoTip}"
-                                                            ToolTip="두 맵을 모두 담는 크기로 새 맵을 만듭니다. 나눠 그린 맵을 이어 붙일 때 씁니다.&#x0a;현재 맵 영역의 월드 좌표는 그대로 두고 yaml origin만 새 크기에 맞게 바꿉니다.&#x0a;맞출 맵의 Unknown은 절대 덮어쓰지 않습니다. 3개 이상은 합친 맵에 다음 맵을 다시 맞추면 됩니다." />
+                                                            ToolTip="두 맵 이미지 전체를 담는 크기로 새 맵을 만듭니다. 나눠 그린 맵을 이어 붙일 때 씁니다.&#x0a;현재 맵 영역의 월드 좌표는 그대로 두고 yaml origin만 새 크기에 맞게 바꿉니다.&#x0a;맞출 맵의 Unknown은 절대 덮어쓰지 않습니다. 3개 이상은 합친 맵에 다음 맵을 다시 맞추면 됩니다.&#x0a;Ctrl+Z로 합치기 전(맞출 맵 · 기준 맵 포함)으로 돌아갈 수 있습니다." />
                                         </StackPanel>
                                         <StackPanel Margin="32,12,0,0">
                                             <Border Style="{StaticResource SegmentTrack}">
@@ -1108,11 +1184,14 @@
                                             </Border>
                                             <TextBlock x:Name="MergeRuleText" Style="{StaticResource Caption}" Margin="0,8,0,0" LineHeight="18"
                                                        Text="현재 맵이 Unknown인 곳만 맞출 맵으로 채웁니다. 겹친 곳에 이중 벽이 생기지 않습니다." />
+                                            <CheckBox x:Name="MergeTrimCheck" Style="{StaticResource Switch}" Content="맞출 맵의 Unknown 여백 잘라내기" Margin="0,8,0,0"
+                                                      Click="OnMergeTrimChanged"
+                                                      ToolTip="끄면(기본) 두 맵 이미지 전체를 담는 크기로 만듭니다.&#x0a;켜면 맞출 맵은 실제로 그려진(Unknown이 아닌) 부분만 담아 결과가 작아집니다." />
                                             <TextBlock x:Name="MergeSizeText" Style="{StaticResource Caption}" Margin="0,8,0,0" />
-                                            <Button Margin="0,12,0,0" Click="OnSecondMerge" ToolTip="확인창에서 결과 크기 · 영향을 확인한 뒤 합칩니다.">
+                                            <Button Margin="0,12,0,0" Click="OnSecondMerge" ToolTip="두 맵을 합칩니다. Ctrl+Z로 되돌릴 수 있습니다.">
                                                 <StackPanel Orientation="Horizontal">
                                                     <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Merge}" />
-                                                    <TextBlock Text="합치기…" />
+                                                    <TextBlock Text="합치기" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
@@ -1431,7 +1510,7 @@
                                             <TextBlock Text="신규 맵 전용" FontSize="12" Foreground="{DynamicResource WarningTextBrush}" VerticalAlignment="Center" />
                                         </Border>
                                         <ContentControl Style="{StaticResource InfoTip}"
-                                                        ToolTip="맵을 주축 각도만큼 회전해 벽을 수평 · 수직으로 맞춥니다.&#x0a;맵 크기와 좌표계가 바뀌므로 스테이션 · 경로 티칭 전에만 사용하세요.&#x0a;저장 시 yaml origin을 갱신합니다. 기준 맵 비교 중에는 쓸 수 없습니다." />
+                                                        ToolTip="맵을 주축 각도만큼 회전해 벽을 수평 · 수직으로 맞춥니다.&#x0a;맵 크기와 좌표계가 바뀌므로 스테이션 · 경로 티칭 전에만 사용하세요.&#x0a;월드 (0, 0) 지점은 같은 곳에 남고, 저장 시 yaml origin을 갱신합니다. Ctrl+Z로 되돌릴 수 있습니다.&#x0a;기준 맵 비교 중에는 쓸 수 없습니다. 원하는 각도로 돌리려면 편집 탭 › 회전 · 원점." />
                                     </StackPanel>
                                     <Button x:Name="DeskewButton" Margin="0,12,0,0" Click="OnDeskew">
                                         <StackPanel Orientation="Horizontal">

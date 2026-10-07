@@ -243,7 +243,11 @@ public static class MapRegistration
         return new IntRect(ix0, iy0, (int)Math.Ceiling(x1 - 1e-6) - ix0, (int)Math.Ceiling(y1 - 1e-6) - iy0);
     }
 
-    /// <summary>합친 맵 범위 (현재 맵 좌표): 현재 맵 전체 + 맞출 맵의 알려진 부분(movingHull = KnownHull)</summary>
+    /// <summary>맵 이미지 전체 사각형 꼭짓점 (Unknown 여백 포함)</summary>
+    public static PointD[] FullRect(MapImage m) =>
+        new[] { new PointD(0, 0), new PointD(m.Width, 0), new PointD(m.Width, m.Height), new PointD(0, m.Height) };
+
+    /// <summary>합친 맵 범위 (현재 맵 좌표): 현재 맵 전체 + 맞출 맵 (movingHull = FullRect 전체 · KnownHull 알려진 부분만)</summary>
     public static IntRect MergedBounds(MapImage baseMap, IReadOnlyList<PointD> movingHull, MapPose pose)
     {
         IntRect fp = BoundsOf(Transform(movingHull, pose));
@@ -736,9 +740,13 @@ public static class MapRegistration
     /// 맞출 맵은 회전 · 이동 후 Nearest로 다시 찍고, 맞출 맵의 Unknown은 절대 덮어쓰지 않음.
     /// region은 RegionMovingFirst에서 새 맵이 우선할 범위 (현재 맵 좌표)
     /// </summary>
-    public static MergeResult Merge(MapImage baseMap, MapImage moving, MapPose pose, MergeRule rule, byte thr, PixelRegion? region)
+    /// <summary>
+    /// 두 맵 합치기. trimUnknown = false면 두 맵 이미지 전체를 담는 크기, true면 맞출 맵은 알려진 부분만 담음
+    /// </summary>
+    public static MergeResult Merge(MapImage baseMap, MapImage moving, MapPose pose, MergeRule rule, byte thr, PixelRegion? region,
+                                    bool trimUnknown = false)
     {
-        IntRect mb = MergedBounds(baseMap, KnownHull(moving), pose);
+        IntRect mb = MergedBounds(baseMap, trimUnknown ? KnownHull(moving) : FullRect(moving), pose);
         int w = mb.Width, h = mb.Height, ox = -mb.X, oy = -mb.Y;
 
         var img = new MapImage(w, h) { MaxVal = baseMap.MaxVal, Format = baseMap.Format };

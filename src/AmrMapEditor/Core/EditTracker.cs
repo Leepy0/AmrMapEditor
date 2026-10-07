@@ -218,6 +218,9 @@ public sealed class UndoStack
         _redo.Clear();
     }
 
+    /// <summary>새 작업이 시작될 때 다시 실행 목록 비움</summary>
+    public void ClearRedo() => _redo.Clear();
+
     private void Trim()
     {
         long total = 0;

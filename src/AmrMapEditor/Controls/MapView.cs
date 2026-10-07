@@ -75,6 +75,9 @@ public sealed class MapView : FrameworkElement
     private static readonly Brush LinePreviewBrush = Frozen(new SolidColorBrush(Color.FromArgb(120, 255, 140, 0)));
     private static readonly Brush RectPreviewBrush = Frozen(new SolidColorBrush(Color.FromArgb(40, 255, 200, 0)));
     private static readonly Brush SecondBackdropBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xB4, 0xBE, 0xCB)));
+    private static readonly Pen OriginXPen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0xFF, 0x45, 0x3A)), 2) { EndLineCap = PenLineCap.Triangle });
+    private static readonly Pen OriginYPen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0x32, 0xD7, 0x4B)), 2) { EndLineCap = PenLineCap.Triangle });
+    private static readonly Brush OriginDotBrush = Frozen(new SolidColorBrush(Colors.White));
     private static readonly Pen SecondOutlinePen = Frozen(new Pen(new SolidColorBrush(Color.FromRgb(0xD9, 0x46, 0xEF)), 1.5) { DashStyle = DashStyles.Dash });
 
     private readonly DrawingVisual _content = new();
@@ -135,6 +138,19 @@ public sealed class MapView : FrameworkElement
     public bool PanModifier { get; set; }
 
     public bool ShowGrid { get; set; } = true;
+
+    /// <summary>월드 원점 (0, 0)의 이미지 좌표 (연속 좌표). null이면 표시 안 함</summary>
+    public PointD? OriginMark
+    {
+        get => _originMark;
+        set
+        {
+            _originMark = value;
+            RenderContent();
+        }
+    }
+
+    private PointD? _originMark;
 
     public IReadOnlyList<MapMarker> Markers
     {
@@ -451,6 +467,18 @@ public sealed class MapView : FrameworkElement
             Geometry g = OutlineGeometry(_selection);
             dc.DrawGeometry(null, DarkPen, g);
             dc.DrawGeometry(null, LightDashPen, g);
+        }
+
+        // 월드 원점: ROS처럼 x축 빨강(오른쪽) · y축 초록(위), 화면 크기 고정
+        if (_originMark is PointD o)
+        {
+            Point p = ImageToScreen(o.X, o.Y);
+            if (p.X > -40 && p.Y > -40 && p.X < vw + 40 && p.Y < vh + 40)
+            {
+                dc.DrawLine(OriginXPen, p, new Point(p.X + 22, p.Y));
+                dc.DrawLine(OriginYPen, p, new Point(p.X, p.Y - 22));
+                dc.DrawEllipse(OriginDotBrush, DarkPen, p, 3, 3);
+            }
         }
     }
 

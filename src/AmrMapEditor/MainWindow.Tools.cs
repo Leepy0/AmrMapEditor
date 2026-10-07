@@ -96,6 +96,11 @@ public partial class MainWindow
     private void OnMapMouseDown(object? sender, MapMouseEventArgs e)
     {
         if (_map == null || _tracker == null || BusyBlocked()) return;
+        if (_originPick)
+        {
+            HandleOriginPick(e.X, e.Y);
+            return;
+        }
         if (_alignStep > 0)
         {
             HandleAlignClick(e.X, e.Y);

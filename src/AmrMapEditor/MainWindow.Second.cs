@@ -171,7 +171,7 @@ public partial class MainWindow
     private void ShowBoth()
     {
         if (_map == null || _second == null) return;
-        MapViewer.CenterOn(MapRegistration.MergedBounds(_map, _secondHull, _secondPose), 0);
+        MapViewer.CenterOn(MapRegistration.MergedBounds(_map, MergeHull(), _secondPose), 0);
     }
 
     // ───────────── 표시 ─────────────
@@ -236,7 +236,7 @@ public partial class MainWindow
         SecondPoseText.Text = $"회전 {p.AngleDeg:0.00}° · 위치 ({p.Tx:0.#}, {p.Ty:0.#}) px";
 
         IntRect fp = MapRegistration.BoundsOf(outline);
-        IntRect mb = MapRegistration.MergedBounds(_map, _secondHull, p);
+        IntRect mb = MapRegistration.MergedBounds(_map, MergeHull(), p);
         int w = mb.Width, h = mb.Height;
         long inside = fp.Intersect(_map.Bounds).Area;
         double outside = fp.Area > 0 ? 1 - (double)inside / fp.Area : 0;
@@ -855,6 +855,16 @@ public partial class MainWindow
 
     // ───────────── 합치기 ─────────────
 
+    /// <summary>합친 크기에 넣을 맞출 맵 범위: 기본은 이미지 전체(Unknown 여백 포함), 옵션이면 알려진 부분만</summary>
+    private IReadOnlyList<PointD> MergeHull() =>
+        MergeTrimCheck.IsChecked == true || _second == null ? _secondHull : MapRegistration.FullRect(_second);
+
+    private void OnMergeTrimChanged(object sender, RoutedEventArgs e)
+    {
+        if (!_ready || _second == null) return;
+        ApplySecondPose();   // 결과 크기 문구 갱신
+    }
+
     private MergeRule SelectedMergeRule() =>
         MergeMovingFirst.IsChecked == true ? MergeRule.MovingFirst
         : MergeUnion.IsChecked == true ? MergeRule.ObstacleUnion
@@ -891,7 +901,7 @@ public partial class MainWindow
             return;
         }
 
-        IntRect mb = MapRegistration.MergedBounds(_map, _secondHull, _secondPose);
+        IntRect mb = MapRegistration.MergedBounds(_map, MergeHull(), _secondPose);
         int nw = mb.Width, nh = mb.Height;
         if ((long)nw * nh > 400_000_000L)
         {
@@ -900,31 +910,19 @@ public partial class MainWindow
             return;
         }
 
-        // 실행 취소 이력이 초기화되므로 확인
-        string yaml = _meta.SourcePath != null
-            ? "새 크기에 맞게 갱신 · 기존 영역의 월드 좌표는 그대로"
-            : "yaml이 없어 새 origin은 직접 반영해야 합니다";
-        if (!Confirm("두 맵을 합칠까요?",
-                     "실행 취소할 수 없고, 열린 기준 맵과 맞출 맵은 닫힙니다. 원본을 남기려면 저장할 때 다른 이름으로 저장(Ctrl+Shift+S)하세요.",
-                     "합치기",
-                     new[]
-                     {
-                         ("크기", $"{_map.Width} × {_map.Height} → {nw} × {nh}"),
-                         ("겹친 곳", MergeRuleName(rule)),
-                         ("yaml origin", yaml),
-                         ("같이 옮김", "보호 영역 · 도면 배치"),
-                     }))
-            return;
-
+        // 확인 없이 실행: Ctrl+Z로 합치기 전(맞출 맵 · 기준 맵 포함)으로 돌아감
         CancelDrag();
         CancelPolygon();
         CancelAlign(true);
         CancelPair();
+        CancelOriginPick();
 
+        bool trim = MergeTrimCheck.IsChecked == true;
         MergeResult res;
         using (new WaitCursor())
             res = MapRegistration.Merge(_map, _second, _secondPose, rule, _occThreshold,
-                rule == MergeRule.RegionMovingFirst ? _selection : null);
+                rule == MergeRule.RegionMovingFirst ? _selection : null, trim);
+        PushFrame("맵 합치기");
         (double ox, double oy) = MapRegistration.MergedOrigin(_meta, _map.Height, res);
         int dx = res.OffsetX, dy = res.OffsetY;
 
@@ -953,33 +951,13 @@ public partial class MainWindow
         _meta.OriginX = ox;
         _meta.OriginY = oy;
         MarkMetaChanged("맵 합치기");
-        _tracker = new EditTracker(_map);
-        _undo.Clear();
         _opLog.Add($"{DateTime.Now:HH:mm:ss} 맵 합치기: {secondName} ({oldW}×{oldH} → {_map.Width}×{_map.Height}, " +
                    $"{MergeRuleName(rule)}, 맞출 맵에서 {res.FromMoving:N0} px)");
         _axis = null;
-        UpdateAxisText();
-
-        _selection = null;
-        ResetCandidates();
-        _diffRegions.Clear();
         _updateAreas.Clear();
-        _focusMarker = null;
-
-        MapViewer.CreateImage(_map.Width, _map.Height);
-        RedrawBase(Full);
-        ApplyProtect();
-        UpdateAreasChanged();
-        RebuildDxfGeometry();
-        RefreshMarkers();
-        MapViewer.FitToView();
-        SetDirty(true);
-        UpdateInfo();
-        UpdateSelectionUi();
-        UpdateUndoButtons();
-        UpdateDiffStats();
-        SetStatus($"합치기 완료: {_map.Width} × {_map.Height} px (맞출 맵에서 {res.FromMoving:N0} px) · " +
-                  "원본을 남기려면 다른 이름으로 저장(Ctrl+Shift+S)하세요.");
+        ReloadDocument(sizeChanged: true);
+        SetStatus($"합치기 완료: {oldW} × {oldH} → {_map.Width} × {_map.Height} px (맞출 맵에서 {res.FromMoving:N0} px, {MergeRuleName(rule)}) · " +
+                  "기존 영역의 월드 좌표는 그대로 · 원본을 남기려면 다른 이름으로 저장(Ctrl+Shift+S)", undo: true);
     }
 
     /// <summary>영역을 정수 픽셀만큼 옮김 (사각형은 사각형 그대로)</summary>

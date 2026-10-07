@@ -230,29 +230,28 @@ internal static class Program
 
         double angle = 0;
         int oldW = 460, oldH = 380, newW = 0, newH = 0;
+        // 확인창 없이 실행 (Ctrl+Z로 되돌림) → 상태 표시줄에서 각도 · 크기를 읽음
+        //   예: "기울기 보정 (+3.21°): 460 × 380 → 476 × 405 px · …"
         Step("기울기 보정", () =>
         {
             ClickText("주축에 맞춰 회전", 0);
-            AutomationElement dlg = WaitDialog();
-            Thread.Sleep(700);
-            string all = string.Join("\n", dlg.FindAll(TreeScope.Descendants, Condition.TrueCondition)
-                .Cast<AutomationElement>().Select(e => e.Current.Name));
-            Match m = Regex.Match(all, @"(-?\d+(?:\.\d+)?)°");
-            if (m.Success) angle = double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
-            Match s = Regex.Match(all, @"(\d+) × (\d+) → (\d+) × (\d+)");
+            WaitIdle(2000);
+            if (FindDialog() != null) throw new Exception("기울기 보정에서 대화상자가 뜸");
+            string msg = StatusText();
+            Match m = Regex.Match(msg, @"\(([+-]?\d+(?:\.\d+)?)°\)");
+            if (m.Success) angle = double.Parse(m.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture);
+            Match s = Regex.Match(msg, @"(\d+) × (\d+) → (\d+) × (\d+)");
             if (s.Success)
             {
                 oldW = int.Parse(s.Groups[1].Value); oldH = int.Parse(s.Groups[2].Value);
                 newW = int.Parse(s.Groups[3].Value); newH = int.Parse(s.Groups[4].Value);
             }
             Say($"deskew angle {angle} {oldW}x{oldH} -> {newW}x{newH}");
-            Shot("13-deskew-confirm", Dialog: dlg);
-            ClickButtonIn(dlg, "회전");
-            WaitIdle(2000);
+            Check(m.Success && s.Success, "기울기 보정", msg);
             Key((byte)'F');
             Thread.Sleep(800);
             Park();
-            Shot("14-deskew-done");
+            Shot("14-deskew-done", "StatusMessage", "StatusUndoButton");
         });
 
         // 기울기 보정 전 좌표 → 보정 후 좌표 (MainWindow.Cleanup.cs OnDeskew와 같은 식)
@@ -288,6 +287,52 @@ internal static class Program
             Thread.Sleep(1200);
             StopRecord();
             Shot("15-straighten", "StatusMessage");
+        });
+
+        // ── 회전 · 원점 (편집 탭) ──
+        Step("원점 지정", () =>
+        {
+            Key(VK.Control, (byte)'1');
+            Thread.Sleep(600);
+            Key((byte)'F');
+            Thread.Sleep(600);
+            Calibrate();
+            ClickText("맵에서 지정", 0);
+            Thread.Sleep(400);
+            (double wx, double wy) = D(60, 330);
+            (double sx, double sy) = M(wx, wy);
+            MoveTo(sx, sy, 400);
+            Thread.Sleep(150);
+            LeftClick();
+            WaitIdle(800);
+            string msg = StatusText();
+            Check(msg.StartsWith("원점 지정", StringComparison.Ordinal), "원점 지정", msg);
+            Park();
+            Shot("17-origin", "OriginXBox", "OriginYBox", "StatusMessage", "MapViewer");
+            Key(VK.Control, (byte)'Z');
+            WaitIdle(800);
+            Check(StatusText().StartsWith("실행 취소", StringComparison.Ordinal), "원점 실행 취소", StatusText());
+        });
+
+        Step("맵 회전", () =>
+        {
+            ClickText("180°", 0);
+            WaitIdle(1500);
+            string msg = StatusText();
+            Check(msg.StartsWith("맵 회전", StringComparison.Ordinal), "맵 회전", msg);
+            Key((byte)'F');
+            Thread.Sleep(700);
+            Park();
+            Shot("18-rotate", "StatusMessage", "StatusUndoButton");
+            Key(VK.Control, (byte)'Z');
+            WaitIdle(1500);
+            Check(StatusText().StartsWith("실행 취소", StringComparison.Ordinal), "회전 실행 취소", StatusText());
+            Key(VK.Control, (byte)'Z');   // 기울기 보정까지 되돌림 (픽셀 기록 → 문서 상태 순서)
+            WaitIdle(1500);
+            Say("undo chain: " + StatusText());
+            Key(VK.Control, (byte)'Y');
+            WaitIdle(1500);
+            Say("redo: " + StatusText());
         });
 
         Step("닫기", () =>
@@ -703,9 +748,22 @@ internal static class Program
     private static void Step(string name, Action a)
     {
         Say($"── {name}");
-        try { a(); }
+        try
+        {
+            a();
+            // 단계가 끝났는데 대화상자가 남아 있으면 (예상하지 못한 오류 창 등) 경고로 남김
+            AutomationElement? left = FindDialog();
+            if (left != null)
+            {
+                string text = string.Join(" / ", left.FindAll(TreeScope.Descendants, Condition.TrueCondition)
+                    .Cast<AutomationElement>().Select(e => e.Current.Name).Where(n => !string.IsNullOrWhiteSpace(n)).Take(8));
+                Console.WriteLine($"::warning title=대화상자 남음 ({name})::{text}");
+                Say($"DIALOG LEFT {name}: {text}");
+            }
+        }
         catch (Exception ex)
         {
+            Console.WriteLine($"::warning title=단계 실패 ({name})::{ex.Message}");
             Say($"FAIL {name}: {ex.Message}\n{ex.StackTrace}");
             try { _rec?.Stop(); } catch { }
             _rec = null;
@@ -784,6 +842,20 @@ internal static class Program
     {
         _rec?.Stop();
         _rec = null;
+    }
+
+    /// <summary>상태 표시줄 문구 (TextBlock 자동화 이름 = 글자)</summary>
+    private static string StatusText()
+    {
+        try { return ById("StatusMessage").Current.Name ?? ""; }
+        catch { return ""; }
+    }
+
+    /// <summary>동작 확인: 결과를 Actions 주석(annotation)으로 남김</summary>
+    private static void Check(bool ok, string what, string detail)
+    {
+        Console.WriteLine(ok ? $"::notice title=확인 {what}::{detail}" : $"::warning title=확인 실패 {what}::{detail}");
+        Say($"{(ok ? "OK" : "NG")} {what}: {detail}");
     }
 
     private static void Say(string s)
