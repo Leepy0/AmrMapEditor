@@ -40,6 +40,9 @@ public static class Updater
     public const string AssetName = "AmrMapEditor.exe";
     public static string ReleasesPage => $"https://github.com/{Repo}/releases";
 
+    /// <summary>최신 정식 버전 exe 고정 주소 (버전이 바뀌어도 같음, 브라우저로 직접 받기)</summary>
+    public static string DownloadUrl => $"https://github.com/{Repo}/releases/latest/download/{AssetName}";
+
     private const string PendingKey = "UpdatePending";
     private static readonly HttpClient Http;   // 버전(User-Agent)을 읽은 뒤 만들어야 하므로 정적 생성자에서
 

@@ -142,7 +142,7 @@
                             ToolTip="휠  확대 / 축소&#x0a;가운데 버튼 · Space+드래그  화면 이동&#x0a;F  화면 맞춤&#x0a;[ ]  브러시 크기&#x0a;1 · 2 · 3  Free · 장애물 · Unknown&#x0a;A  맞출 맵 이동 (방향키 1px · 쉼표 · 마침표 0.1°)&#x0a;Ctrl+1~5  오른쪽 탭 (편집 · 업데이트 · 맞추기 · 정리 · 도면)&#x0a;F6 / Shift+F6  도구 막대 · 도구 · 맵 · 오른쪽 패널 사이 이동&#x0a;Esc  선택 해제 / 진행 중인 작업 취소&#x0a;Ctrl+D  선택 해제">
                         <Path Style="{StaticResource Icon}" Data="{StaticResource I.Help}" />
                     </Button>
-                    <Button Style="{StaticResource IconButton}" Click="OnAbout" ToolTip="정보 · 업데이트&#x0a;버전 확인, 새 버전 받기, 이전 버전으로 되돌리기">
+                    <Button Style="{StaticResource IconButton}" Click="OnAbout" ToolTip="정보 · 업데이트&#x0a;버전 확인, 새 버전 받기, 최신 버전 직접 받기 · 링크 복사, 이전 버전으로 되돌리기">
                         <Path Style="{StaticResource Icon}" Data="{StaticResource I.Info}" />
                     </Button>
                 </StackPanel>

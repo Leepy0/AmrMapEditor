@@ -159,10 +159,10 @@ public partial class MainWindow
             string why = !Updater.CanSelfUpdate
                 ? "로컬 빌드는 자동으로 바꾸지 않습니다."
                 : $"프로그램이 있는 폴더({Path.GetDirectoryName(Updater.ExePath)})에 쓸 수 없어 자동으로 바꿀 수 없습니다.";
-            int c = MessageDialog.Show(owner, DialogKind.Info, $"새 버전 {v}", why + " 릴리스 페이지에서 받아 바꿔 주세요.", details, notes,
-                new[] { new DialogButton("릴리스 페이지 열기", Primary: true), new DialogButton("닫기", Cancel: true) }, 0,
+            int c = MessageDialog.Show(owner, DialogKind.Info, $"새 버전 {v}", why + " 브라우저로 받아 지금 쓰는 exe와 바꿔 주세요.", details, notes,
+                new[] { new DialogButton("최신 버전 받기", Primary: true), new DialogButton("닫기", Cancel: true) }, 0,
                 "변경 내용", moreExpanded: true, moreMono: false);
-            if (c == 0) Updater.OpenPage(r.PageUrl);
+            if (c == 0) Updater.OpenPage(Updater.DownloadUrl);
             return;
         }
 
@@ -419,10 +419,62 @@ public partial class MainWindow
         rollback.Click += (_, _) => RollbackAndRestart();
         root.Children.Add(rollback);
 
-        var page = new Button { Content = "릴리스 페이지 열기", HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 0) };
+        // 직접 받기: 사내망처럼 자동 확인이 막힌 곳에서도 브라우저로 받을 수 있게 고정 주소 연결
+        var directHeader = new TextBlock { Text = "직접 받기", Margin = new Thickness(0, 24, 0, 8) };
+        directHeader.SetResourceReference(FrameworkElement.StyleProperty, "SectionHeader");
+        root.Children.Add(directHeader);
+        var directText = new TextBlock
+        {
+            Text = "자동 확인이 안 되는 곳(사내망 등)에서는 브라우저로 최신 정식 버전을 받아 지금 쓰는 exe와 바꿔 쓰세요.",
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+            LineHeight = 18,
+        };
+        directText.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryLabelBrush");
+        root.Children.Add(directText);
+
+        var links = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
+        var download = new Button { ToolTip = Updater.DownloadUrl, Margin = new Thickness(0, 0, 16, 0) };
+        download.SetResourceReference(FrameworkElement.StyleProperty, "LinkButton");
+        var downloadIcon = new System.Windows.Shapes.Path
+        {
+            Data = (Geometry)FindResource("I.Download"),
+            Width = 12,
+            Height = 12,
+            Stretch = Stretch.Uniform,
+            Margin = new Thickness(0, 0, 4, 0),
+        };
+        downloadIcon.SetResourceReference(FrameworkElement.StyleProperty, "Icon");
+        var downloadContent = new StackPanel { Orientation = Orientation.Horizontal };
+        downloadContent.Children.Add(downloadIcon);
+        downloadContent.Children.Add(new TextBlock { Text = "최신 버전 받기", VerticalAlignment = VerticalAlignment.Center });
+        download.Content = downloadContent;
+        download.Click += (_, _) => Updater.OpenPage(Updater.DownloadUrl);
+        links.Children.Add(download);
+
+        var copy = new Button { Content = "링크 복사", ToolTip = "다운로드 주소를 복사합니다 (동료에게 전달할 때).", Margin = new Thickness(0, 0, 16, 0) };
+        copy.SetResourceReference(FrameworkElement.StyleProperty, "LinkButton");
+        copy.Click += (_, _) =>
+        {
+            try
+            {
+                Clipboard.SetText(Updater.DownloadUrl);
+                copy.Content = "복사됨";
+                SetStatus($"다운로드 주소를 복사했습니다: {Updater.DownloadUrl}");
+            }
+            catch (Exception)
+            {
+                copy.Content = "복사 실패 · 다시 시도";   // 다른 프로그램이 클립보드를 쓰는 중
+            }
+        };
+        copy.MouseLeave += (_, _) => copy.Content = "링크 복사";
+        links.Children.Add(copy);
+
+        var page = new Button { Content = "릴리스 페이지 (변경 내용)" };
         page.SetResourceReference(FrameworkElement.StyleProperty, "LinkButton");
         page.Click += (_, _) => Updater.OpenPage(_updRelease?.PageUrl ?? Updater.ReleasesPage);
-        root.Children.Add(page);
+        links.Children.Add(page);
+        root.Children.Add(links);
 
         var footer = new DockPanel { Margin = new Thickness(24), LastChildFill = false };
         var hint = new TextBlock { Text = "Esc  닫기", FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
@@ -486,10 +538,10 @@ public partial class MainWindow
             }
             else
             {
-                status.Text = _updCheckError != null ? $"확인하지 못했습니다 · {_updCheckError}"
+                status.Text = _updCheckError != null ? $"확인하지 못했습니다 · {_updCheckError} 아래 '최신 버전 받기'로 직접 받을 수 있습니다."
                     : _updCheckedAt is DateTime t ? $"최신 버전입니다 ({t:HH:mm} 확인)"
                     : Updater.CanSelfUpdate ? "아직 확인하지 않았습니다."
-                    : "로컬 빌드는 자동으로 업데이트하지 않습니다. 정식 버전은 릴리스 페이지에서 받으세요.";
+                    : "로컬 빌드는 자동으로 업데이트하지 않습니다. 정식 버전은 아래 '최신 버전 받기'로 받으세요.";
                 primary.Content = "업데이트 확인";
                 onPrimary = async () => await CheckForUpdateAsync(manual: true);
             }
