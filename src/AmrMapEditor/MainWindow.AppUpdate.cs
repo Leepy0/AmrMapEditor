@@ -647,6 +647,13 @@ public partial class MainWindow
         };
         Refresh();
         w.Loaded += (_, _) => primary.Focus();
+        // 모달이 아닌 창이라 Esc를 직접 처리 (포커스가 어디 있든 닫힘)
+        w.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key != System.Windows.Input.Key.Escape) return;
+            e.Handled = true;
+            w.Close();
+        };
         w.Show();
     }
 }
