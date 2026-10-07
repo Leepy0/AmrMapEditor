@@ -8,7 +8,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>AmrMapEditor</RootNamespace>
     <AssemblyName>AmrMapEditor</AssemblyName>
-    <Version>0.7.4</Version>
+    <Version>0.7.5</Version>
     <Product>AMR Map Editor</Product>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets/app.ico</ApplicationIcon>
