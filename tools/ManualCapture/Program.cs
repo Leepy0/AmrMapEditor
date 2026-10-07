@@ -486,6 +486,7 @@ internal static class Program
             AutomationElement dlg = WaitDialog();
             Thread.Sleep(800);
             Shot("43-about", Dialog: dlg);
+            Park();   // 정보 버튼 툴팁이 남지 않게
             Key(VK.Escape);
             for (int i = 0; i < 10 && FindDialog() != null; i++) Thread.Sleep(200);
             AutomationElement? still = FindDialog();
@@ -544,10 +545,25 @@ internal static class Program
         var cond = new AndCondition(
             new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Window),
             new PropertyCondition(AutomationElement.ProcessIdProperty, _app.Id));
-        foreach (AutomationElement w in _win.FindAll(TreeScope.Children, cond)) return w;
+        foreach (AutomationElement w in _win.FindAll(TreeScope.Children, cond))
+            if (!IsPopup(w)) return w;
         foreach (AutomationElement w in AutomationElement.RootElement.FindAll(TreeScope.Children, cond))
-            if (w.Current.NativeWindowHandle != _hwnd.ToInt32()) return w;
+            if (w.Current.NativeWindowHandle != _hwnd.ToInt32() && !IsPopup(w)) return w;
         return null;
+    }
+
+    /// <summary>툴팁 · 드롭다운 같은 WPF 팝업 창은 대화상자가 아님</summary>
+    private static bool IsPopup(AutomationElement w)
+    {
+        try
+        {
+            string cls = w.Current.ClassName ?? "";
+            return cls.Contains("Popup", StringComparison.OrdinalIgnoreCase) || cls.Contains("ToolTip", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static AutomationElement WaitDialog(int timeoutMs = 10000)
