@@ -11,6 +11,7 @@
     <Version>0.7.0</Version>
     <Product>AMR Map Editor</Product>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/app.ico</ApplicationIcon>
     <!-- 배포 exe에 넣을 위성 리소스 언어 (자체 포함 크기 줄이기) -->
     <SatelliteResourceLanguages>ko</SatelliteResourceLanguages>
     <!-- CI가 -p:BuildChannel=release|dev 로 넘김. 그 외는 로컬 빌드 (자동 업데이트 안 함) -->

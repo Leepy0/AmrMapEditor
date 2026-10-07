@@ -1,3 +1,5 @@
+<img src="docs/icon.png" width="64" align="left" alt="">
+
 # AMR Map Editor v0.7
 
 AMR 맵(PGM) 전용 편집기. GIMP 대체용으로, 신규 맵 정리, 기존 맵 업데이트 보정, 나눠 그린 맵 합치기에 필요한 기능을 담았다.
@@ -316,6 +318,7 @@ src/AmrMapEditor/
   MessageDialog.cs          공용 대화상자(동사형 버튼 · 기본 버튼 · Esc), 오류 원인 · 해결 · 로그
   Updater.cs                업데이트 확인 · 받기(SHA-256) · exe 교체 · 되돌리기
   app.manifest              Per-Monitor V2 DPI
+  Assets/app.ico · app.svg  앱 아이콘 (make-icon.py로 생성: Unknown 바탕 위 맵과 벽을 그리는 펜)
   MainWindow.xaml.cs        파일/저장/편집 공통/키보드/상태 표시줄
   MainWindow.Busy.cs        진행 표시 · 취소, 맞출 맵 반영 되돌리기 연동
   MainWindow.AppUpdate.cs   업데이트 칩 · 안내 · 종료 시 적용 · 정보 창
