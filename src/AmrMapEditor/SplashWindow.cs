@@ -22,14 +22,38 @@ public static class Splash
     private static Dispatcher? _dispatcher;
     private static readonly ManualResetEventSlim Shown = new(false);
 
-    public static void Show(bool dark)
+    // 진행 표시: 단계(코드가 알려 줌)와 시간(지난번 걸린 시간 대비 경과) 중 큰 쪽
+    private static readonly DateTime ProcessStart = StartTime();
+    private static double _expectedMs;          // 지난번 시작에 걸린 시간 (0 = 모름 → 왕복 막대)
+    private static double _stepFraction;        // 단계 기준 진행률 0 ~ 1
+    private static string _stage = "불러오는 중…";
+    private static TextBlock? _stageText, _etaText;
+    private static Rectangle? _bar;
+    private static Border? _track;
+    private static TranslateTransform? _sweep;
+    private static bool _determinate;
+
+    /// <summary>프로그램 시작(더블클릭)부터 지금까지 ms. 압축 해제 · 런타임 준비 시간도 포함</summary>
+    public static double ElapsedMs => (DateTime.Now - ProcessStart).TotalMilliseconds;
+
+    private static DateTime StartTime()
+    {
+        try { return System.Diagnostics.Process.GetCurrentProcess().StartTime; }
+        catch (Exception) { return DateTime.Now; }
+    }
+
+    /// <param name="expectedMs">지난번 시작에 걸린 시간 (설정에 저장). 0이면 끝을 모르는 왕복 막대</param>
+    public static void Show(bool dark, double expectedMs)
     {
         if (_dispatcher != null) return;
+        _expectedMs = expectedMs;
         var t = new Thread(() =>
         {
             try
             {
                 _window = Build(dark);
+                var timer = new DispatcherTimer(TimeSpan.FromMilliseconds(100), DispatcherPriority.Normal, (_, _) => Refresh(), Dispatcher.CurrentDispatcher);
+                _window.Closed += (_, _) => timer.Stop();
                 _window.Closed += (_, _) => Dispatcher.CurrentDispatcher.BeginInvokeShutdown(DispatcherPriority.Background);
                 _window.Show();
                 _dispatcher = Dispatcher.CurrentDispatcher;
@@ -52,6 +76,46 @@ public static class Splash
         Shown.Wait(2000);   // 메인 창 준비 전에 먼저 보이도록 잠깐 기다림
     }
 
+    /// <summary>지금 하는 일과 단계 기준 진행률(0 ~ 1). 어느 스레드에서든 호출 가능</summary>
+    public static void Report(string stage, double fraction)
+    {
+        _stage = stage;
+        _stepFraction = Math.Clamp(fraction, 0, 1);
+        _dispatcher?.BeginInvoke(Refresh);
+    }
+
+    /// <summary>시작 화면 스레드에서: 글 · 막대 갱신</summary>
+    private static void Refresh()
+    {
+        if (_window == null || _stageText == null || _etaText == null || _bar == null || _track == null) return;
+        _stageText.Text = _stage;
+        double elapsed = ElapsedMs;
+        double byTime = _expectedMs > 0 ? Math.Min(0.95, elapsed / _expectedMs) : 0;
+        double p = Math.Max(_stepFraction, byTime);
+        if (_expectedMs > 0)
+        {
+            double remain = Math.Max(0, _expectedMs - elapsed) / 1000;
+            _etaText.Text = remain >= 0.5 ? $"약 {Math.Ceiling(remain):0}초 남음" : "곧 완료";
+        }
+        else
+        {
+            _etaText.Text = "";
+        }
+        if (p <= 0 && _expectedMs <= 0) return;   // 아는 게 없으면 왕복 막대 유지
+
+        if (!_determinate)
+        {
+            // 왕복 막대 → 채워지는 막대
+            _determinate = true;
+            _sweep?.BeginAnimation(TranslateTransform.XProperty, null);
+            if (_sweep != null) _sweep.X = 0;
+        }
+        double target = Math.Max(8, _track.ActualWidth * p);
+        if (Math.Abs(target - _bar.Width) < 0.5) return;
+        _bar.BeginAnimation(FrameworkElement.WidthProperty,
+            new DoubleAnimation(target, TimeSpan.FromMilliseconds(150)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
+    }
+
     /// <summary>메인 창이 그려진 뒤 호출. 살짝 사라지며 닫힘</summary>
     public static void Close()
     {
@@ -61,6 +125,9 @@ public static class Splash
         d.BeginInvoke(() =>
         {
             Window w = _window!;
+            _stepFraction = 1;
+            _stage = "완료";
+            Refresh();
             var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(160)) { EasingFunction = new QuadraticEase() };
             fade.Completed += (_, _) => w.Close();
             w.BeginAnimation(UIElement.OpacityProperty, fade);
@@ -108,14 +175,18 @@ public static class Splash
         });
         grid.Children.Add(text);
 
-        // 진행 표시 (끝을 알 수 없으므로 왕복하는 막대) + 상태 글
+        // 진행 막대: 지난번 걸린 시간을 알면 채워지는 막대, 모르면 왕복하는 막대. 아래에 지금 하는 일 · 남은 시간
         var trackBorder = new Border { Height = 4, CornerRadius = new CornerRadius(2), Background = track, ClipToBounds = true };
         var bar = new Rectangle { Width = 72, Height = 4, RadiusX = 2, RadiusY = 2, Fill = accent, HorizontalAlignment = HorizontalAlignment.Left };
         var move = new TranslateTransform();
         bar.RenderTransform = move;
         trackBorder.Child = bar;
+        _track = trackBorder;
+        _bar = bar;
+        _sweep = move;
         trackBorder.SizeChanged += (_, e) =>
         {
+            if (_determinate) { Refresh(); return; }
             var anim = new DoubleAnimation(-bar.Width, e.NewSize.Width, TimeSpan.FromMilliseconds(1100))
             {
                 RepeatBehavior = RepeatBehavior.Forever, EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
@@ -124,10 +195,15 @@ public static class Splash
         };
         var status = new StackPanel();
         status.Children.Add(trackBorder);
-        status.Children.Add(new TextBlock
-        {
-            Text = "불러오는 중…", FontSize = 12, Foreground = secondary, Margin = new Thickness(0, 10, 0, 0),
-        });
+        var line2 = new Grid { Margin = new Thickness(0, 10, 0, 0) };
+        line2.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        line2.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        _stageText = new TextBlock { Text = _stage, FontSize = 12, Foreground = secondary, TextTrimming = TextTrimming.CharacterEllipsis };
+        _etaText = new TextBlock { FontSize = 12, Foreground = secondary, Margin = new Thickness(12, 0, 0, 0) };
+        Grid.SetColumn(_etaText, 1);
+        line2.Children.Add(_stageText);
+        line2.Children.Add(_etaText);
+        status.Children.Add(line2);
         Grid.SetRow(status, 2);
         Grid.SetColumnSpan(status, 2);
         grid.Children.Add(status);

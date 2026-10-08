@@ -17,11 +17,18 @@ public partial class App : Application
         // 메인 창은 만드는 데 시간이 걸리므로 먼저 시작 화면을 띄워 실행 중임을 알림
         AppSettings settings = AppSettings.Load();
         bool dark = settings.Values.TryGetValue("Theme", out string? theme) ? theme == "Dark" : Theme.SystemPrefersDark();
-        Splash.Show(dark);
+        double expected = settings.Values.TryGetValue("StartupMs", out string? ms) &&
+                          double.TryParse(ms, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : 0;
+        Splash.Show(dark, expected);
         try
         {
+            Splash.Report("화면 만드는 중", 0.1);
             var main = new MainWindow();
-            main.ContentRendered += (_, _) => Splash.Close();   // 첫 화면이 그려진 뒤 사라짐
+            main.ContentRendered += (_, _) =>
+            {
+                main.RecordStartup();   // 다음 시작 화면의 남은 시간 계산용
+                Splash.Close();         // 첫 화면이 그려진 뒤 사라짐
+            };
             main.Show();
         }
         catch (Exception)

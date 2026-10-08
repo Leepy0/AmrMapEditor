@@ -67,6 +67,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        Splash.Report("설정 · 이전 상태 복원 중", 0.6);
 
         // 테마: 저장된 선택, 없으면 Windows 앱 모드
         bool dark = _settings.Values.TryGetValue("Theme", out string? theme) ? theme == "Dark" : Theme.SystemPrefersDark();
@@ -109,7 +110,19 @@ public partial class MainWindow : Window
         RefreshUpdateGuide();
         RefreshSecondUi();
         RefreshStatusChips();
+        Splash.Report("화면 여는 중", 0.85);
         InitAppUpdate();
+    }
+
+    /// <summary>시작에 걸린 시간(더블클릭 → 첫 화면)을 저장. 다음 시작 화면이 남은 시간을 보여 주는 데 씀 (최근 값 위주 평균)</summary>
+    public void RecordStartup()
+    {
+        double now = Splash.ElapsedMs;
+        if (now <= 0 || now > 120_000) return;
+        var ci = CultureInfo.InvariantCulture;
+        double prev = _settings.Values.TryGetValue("StartupMs", out string? s) && double.TryParse(s, NumberStyles.Float, ci, out double v) ? v : 0;
+        double next = prev > 0 ? prev * 0.5 + now * 0.5 : now;
+        _settings.Values["StartupMs"] = Math.Round(next).ToString(ci);
     }
 
     private IntRect Full => _map?.Bounds ?? IntRect.Empty;
@@ -118,7 +131,11 @@ public partial class MainWindow : Window
     {
         // 실행 인자로 전달된 파일 열기 (pgm을 exe에 끌어놓기 등)
         string[] args = Environment.GetCommandLineArgs();
-        if (args.Length > 1 && File.Exists(args[1])) OpenMap(args[1]);
+        if (args.Length > 1 && File.Exists(args[1]))
+        {
+            Splash.Report($"맵 여는 중: {Path.GetFileName(args[1])}", 0.9);
+            OpenMap(args[1]);
+        }
     }
 
     // ───────────── 입력값 저장 ─────────────
