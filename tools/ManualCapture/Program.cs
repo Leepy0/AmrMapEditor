@@ -534,17 +534,17 @@ internal static class Program
         // 시작 화면(별도 창)이 먼저 뜨고, 메인 창(열기 버튼이 있는 창)이 뒤따름
         while (sw.ElapsedMilliseconds < 60000 && _hwnd == IntPtr.Zero)
         {
-            foreach (AutomationElement w in AutomationElement.RootElement.FindAll(TreeScope.Children, mine))
+            foreach (AutomationElement top in AutomationElement.RootElement.FindAll(TreeScope.Children, mine))
             {
                 try
                 {
-                    if (w.FindFirst(TreeScope.Descendants, openBtn) != null)
+                    if (top.FindFirst(TreeScope.Descendants, openBtn) != null)
                     {
-                        _hwnd = new IntPtr(w.Current.NativeWindowHandle);
+                        _hwnd = new IntPtr(top.Current.NativeWindowHandle);
                         mainAt = sw.ElapsedMilliseconds;
                         break;
                     }
-                    if (splashAt < 0 && w.Current.Name == "AMR Map Editor") splashAt = sw.ElapsedMilliseconds;
+                    if (splashAt < 0 && top.Current.Name == "AMR Map Editor") splashAt = sw.ElapsedMilliseconds;
                 }
                 catch (ElementNotAvailableException) { }
             }
