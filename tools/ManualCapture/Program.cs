@@ -41,6 +41,7 @@ internal static class Program
 
     private static int Main(string[] args)
     {
+        if (args.Length == 4 && args[0] == "--time") return TimeStartup(args[1], Path.GetFullPath(args[2]), int.Parse(args[3]));
         if (args.Length < 3)
         {
             Console.Error.WriteLine("usage: ManualCapture <AmrMapEditor.exe> <samples dir> <out dir>");
@@ -526,31 +527,7 @@ internal static class Program
 
     private static void Launch(string exe)
     {
-        _app = Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = _work, UseShellExecute = false })!;
-        var sw = Stopwatch.StartNew();
-        long splashAt = -1, mainAt = -1;
-        var mine = new PropertyCondition(AutomationElement.ProcessIdProperty, _app.Id);
-        var openBtn = new PropertyCondition(AutomationElement.AutomationIdProperty, "OpenButton");
-        // 시작 화면(별도 창)이 먼저 뜨고, 메인 창(열기 버튼이 있는 창)이 뒤따름
-        while (sw.ElapsedMilliseconds < 60000 && _hwnd == IntPtr.Zero)
-        {
-            foreach (AutomationElement top in AutomationElement.RootElement.FindAll(TreeScope.Children, mine))
-            {
-                try
-                {
-                    if (top.FindFirst(TreeScope.Descendants, openBtn) != null)
-                    {
-                        _hwnd = new IntPtr(top.Current.NativeWindowHandle);
-                        mainAt = sw.ElapsedMilliseconds;
-                        break;
-                    }
-                    if (splashAt < 0 && top.Current.Name == "AMR Map Editor") splashAt = sw.ElapsedMilliseconds;
-                }
-                catch (ElementNotAvailableException) { }
-            }
-            if (_hwnd == IntPtr.Zero) Thread.Sleep(100);
-        }
-        if (_hwnd == IntPtr.Zero) throw new Exception("창이 뜨지 않음");
+        (long splashAt, long mainAt) = StartAndWait(exe);
         // 빠른 PC에서는 첫 조회 전에 시작 화면이 이미 닫혔을 수 있어 못 봐도 실패는 아님
         Check(true, "시작 화면", splashAt >= 0 ? $"실행 후 {splashAt} ms에 시작 화면, {mainAt} ms에 메인 창" : $"시작 화면은 못 봄 · 메인 창 {mainAt} ms");
         Thread.Sleep(1500);
@@ -568,6 +545,63 @@ internal static class Program
         LeftClick();
         Thread.Sleep(500);
         Say($"window {wr}");
+    }
+
+    /// <summary>앱을 실행하고 시작 화면 · 메인 창(열기 버튼이 있는 창)이 뜰 때까지 기다림. 걸린 시간(ms, 못 보면 -1)</summary>
+    private static (long SplashAt, long MainAt) StartAndWait(string exe)
+    {
+        _hwnd = IntPtr.Zero;
+        _app = Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = _work, UseShellExecute = false })!;
+        var sw = Stopwatch.StartNew();
+        long splashAt = -1, mainAt = -1;
+        var mine = new PropertyCondition(AutomationElement.ProcessIdProperty, _app.Id);
+        var openBtn = new PropertyCondition(AutomationElement.AutomationIdProperty, "OpenButton");
+        // 시작 화면(별도 창)이 먼저 뜨고, 메인 창이 뒤따름
+        while (sw.ElapsedMilliseconds < 60000 && _hwnd == IntPtr.Zero)
+        {
+            foreach (AutomationElement top in AutomationElement.RootElement.FindAll(TreeScope.Children, mine))
+            {
+                try
+                {
+                    if (top.FindFirst(TreeScope.Descendants, openBtn) != null)
+                    {
+                        _hwnd = new IntPtr(top.Current.NativeWindowHandle);
+                        mainAt = sw.ElapsedMilliseconds;
+                        break;
+                    }
+                    if (splashAt < 0 && top.Current.Name == "AMR Map Editor") splashAt = sw.ElapsedMilliseconds;
+                }
+                catch (ElementNotAvailableException) { }
+            }
+            if (_hwnd == IntPtr.Zero) Thread.Sleep(20);
+        }
+        if (_hwnd == IntPtr.Zero) throw new Exception("창이 뜨지 않음");
+        return (splashAt, mainAt);
+    }
+
+    /// <summary>
+    /// 시작 시간 측정: ManualCapture --time <이름> <exe> <횟수>
+    /// 실행 → 시작 화면 · 메인 창까지 ms → 종료를 반복. 1회째는 첫 실행(압축 해제 · 검사), 그 뒤는 반복 실행
+    /// </summary>
+    private static int TimeStartup(string name, string exe, int runs)
+    {
+        Native.SetProcessDpiAwarenessContext(new IntPtr(-4));
+        _work = Path.GetTempPath();
+        long size = new FileInfo(exe).Length;
+        var rows = new List<string>();
+        for (int i = 1; i <= runs; i++)
+        {
+            (long splashAt, long mainAt) = StartAndWait(exe);
+            Thread.Sleep(500);
+            try { _app.Kill(); _app.WaitForExit(5000); } catch (Exception) { }
+            string row = $"{name}\t{size}\t{i}\t{splashAt}\t{mainAt}";
+            rows.Add(row);
+            Console.WriteLine(row);
+            Thread.Sleep(1000);
+        }
+        Console.WriteLine($"::notice title=시작 시간 {name} ({size / 1048576.0:0.0} MB)::" +
+            string.Join(" · ", rows.ConvertAll(r => { string[] c = r.Split('\t'); return $"{c[2]}회 시작 화면 {c[3]} ms / 메인 창 {c[4]} ms"; })));
+        return 0;
     }
 
     private static Rectangle WinRect()

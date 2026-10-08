@@ -1,0 +1,48 @@
+name: Startup Timing
+
+# 배포 방식별 시작 시간 비교 (Actions 탭 › Startup Timing › Run workflow)
+#   fx    : 프레임워크 종속 (PC에 .NET 10 Desktop Runtime 설치 필요, 작은 exe)
+#   sc-z  : 자체 포함 · 압축 (지금 배포 방식, 약 60 MB)
+#   sc    : 자체 포함 · 비압축 (약 150 MB)
+# 각각 여러 번 실행해 시작 화면 · 메인 창까지 ms를 Actions 주석(annotation)으로 남긴다. 1회째 = 첫 실행
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: '변형별 실행 횟수'
+        default: '4'
+
+jobs:
+  timing:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build (3 variants + timer)
+        run: |
+          P="src/AmrMapEditor/AmrMapEditor.csproj"
+          COMMON="-c Release -r win-x64 -p:DebugType=None -p:DebugSymbols=false -p:BuildChannel=local"
+          dotnet publish $P $COMMON --self-contained false -p:PublishSingleFile=true -o out/fx
+          dotnet publish $P $COMMON --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o out/sc-z
+          dotnet publish $P $COMMON --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=false -o out/sc
+          dotnet build tools/ManualCapture/ManualCapture.csproj -c Release -o build/capture
+          ls -la out/fx/AmrMapEditor.exe out/sc-z/AmrMapEditor.exe out/sc/AmrMapEditor.exe
+
+      - name: Time
+        run: |
+          N="${{ inputs.runs }}"
+          for v in fx sc-z sc; do
+            build/capture/ManualCapture.exe --time "$v" "out/$v/AmrMapEditor.exe" "$N" | tee -a timing.tsv
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: startup-timing
+          path: timing.tsv
