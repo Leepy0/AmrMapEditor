@@ -1,8 +1,7 @@
 <Application x:Class="AmrMapEditor.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:sys="clr-namespace:System;assembly=mscorlib"
-             StartupUri="MainWindow.xaml">
+             xmlns:sys="clr-namespace:System;assembly=mscorlib">
     <Application.Resources>
 
         <!-- ═════════ 색 토큰 (라이트 기본값, 다크는 Theme.cs가 실행 중 교체 · 모두 DynamicResource로 참조) ═════════ -->

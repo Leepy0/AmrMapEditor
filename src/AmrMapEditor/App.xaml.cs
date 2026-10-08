@@ -1,4 +1,6 @@
+using System;
 using System.Windows;
+using AmrMapEditor.Core;
 using System.Windows.Threading;
 
 namespace AmrMapEditor;
@@ -11,6 +13,28 @@ public partial class App : Application
     {
         base.OnStartup(e);
         DispatcherUnhandledException += OnUnhandledException;
+
+        // 메인 창은 만드는 데 시간이 걸리므로 먼저 시작 화면을 띄워 실행 중임을 알림
+        AppSettings settings = AppSettings.Load();
+        bool dark = settings.Values.TryGetValue("Theme", out string? theme) ? theme == "Dark" : Theme.SystemPrefersDark();
+        Splash.Show(dark);
+        try
+        {
+            var main = new MainWindow();
+            main.ContentRendered += (_, _) => Splash.Close();   // 첫 화면이 그려진 뒤 사라짐
+            main.Show();
+        }
+        catch (Exception)
+        {
+            Splash.Close();
+            throw;
+        }
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        Splash.Close();
+        base.OnExit(e);
     }
 
     // 예외로 프로그램이 종료되어 편집 내용을 잃지 않도록 표시 후 계속 진행

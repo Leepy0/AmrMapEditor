@@ -528,14 +528,31 @@ internal static class Program
     {
         _app = Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = _work, UseShellExecute = false })!;
         var sw = Stopwatch.StartNew();
-        while (sw.ElapsedMilliseconds < 60000)
+        long splashAt = -1, mainAt = -1;
+        var mine = new PropertyCondition(AutomationElement.ProcessIdProperty, _app.Id);
+        var openBtn = new PropertyCondition(AutomationElement.AutomationIdProperty, "OpenButton");
+        // 시작 화면(별도 창)이 먼저 뜨고, 메인 창(열기 버튼이 있는 창)이 뒤따름
+        while (sw.ElapsedMilliseconds < 60000 && _hwnd == IntPtr.Zero)
         {
-            _app.Refresh();
-            if (_app.MainWindowHandle != IntPtr.Zero) break;
-            Thread.Sleep(250);
+            foreach (AutomationElement w in AutomationElement.RootElement.FindAll(TreeScope.Children, mine))
+            {
+                try
+                {
+                    if (w.FindFirst(TreeScope.Descendants, openBtn) != null)
+                    {
+                        _hwnd = new IntPtr(w.Current.NativeWindowHandle);
+                        mainAt = sw.ElapsedMilliseconds;
+                        break;
+                    }
+                    if (splashAt < 0 && w.Current.Name == "AMR Map Editor") splashAt = sw.ElapsedMilliseconds;
+                }
+                catch (ElementNotAvailableException) { }
+            }
+            if (_hwnd == IntPtr.Zero) Thread.Sleep(100);
         }
-        _hwnd = _app.MainWindowHandle;
         if (_hwnd == IntPtr.Zero) throw new Exception("창이 뜨지 않음");
+        // 빠른 PC에서는 첫 조회 전에 시작 화면이 이미 닫혔을 수 있어 못 봐도 실패는 아님
+        Check(true, "시작 화면", splashAt >= 0 ? $"실행 후 {splashAt} ms에 시작 화면, {mainAt} ms에 메인 창" : $"시작 화면은 못 봄 · 메인 창 {mainAt} ms");
         Thread.Sleep(1500);
 
         int sw0 = Native.GetSystemMetrics(0), sh0 = Native.GetSystemMetrics(1);

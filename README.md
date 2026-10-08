@@ -13,6 +13,7 @@ AMR 맵(PGM) 전용 편집기. GIMP 대체용으로, 신규 맵 정리, 기존 �
 - **정식 버전**: https://github.com/Leepy0/AmrMapEditor/releases/latest/download/AmrMapEditor.exe
 - Windows x64 단일 exe. .NET이 포함돼 있어 설치 없이 아무 폴더에 두고 실행한다 (약 70 MB).
 - 브라우저로 처음 받으면 SmartScreen이 "알 수 없는 게시자"로 막을 수 있다 → "추가 정보 › 실행" 또는 파일 속성 › 차단 해제. 코드 서명이 없고 버전마다 파일이 바뀌어 평판이 쌓이지 않기 때문이다. 프로그램이 직접 받은 파일(자동 업데이트, 정보 창 '파일로 저장')은 '인터넷에서 받음' 표시가 없어 경고가 뜨지 않는다.
+- 실행하면 바로 "불러오는 중" 시작 화면이 뜨고, 메인 창이 준비되면 사라진다. 한 파일에 .NET을 압축해 넣은 구조라 더블클릭 뒤 시작 화면까지 1 ~ 3초 걸릴 수 있고, 새 버전을 처음 실행할 때는 바이러스 검사 때문에 몇 초 더 걸릴 수 있다.
 - 테스트 빌드(main 최신, 자동 업데이트 대상 아님): https://github.com/Leepy0/AmrMapEditor/releases/download/dev/AmrMapEditor-dev.exe
 
 ## 업데이트
@@ -342,6 +343,7 @@ src/AmrMapEditor/
   Models/ListItems.cs       목록 항목
   App.xaml                  색 토큰(라이트 기본값) · 컨트롤 스타일 · 아이콘
   Theme.cs                  라이트 / 다크 토큰 교체, 제목 표시줄
+  SplashWindow.cs           시작 화면 (별도 스레드, 메인 창이 그려지면 사라짐)
   MessageDialog.cs          공용 대화상자(동사형 버튼 · 기본 버튼 · Esc), 오류 원인 · 해결 · 로그
   Updater.cs                업데이트 확인 · 받기(SHA-256) · exe 교체 · 되돌리기
   app.manifest              Per-Monitor V2 DPI
