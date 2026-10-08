@@ -27,7 +27,15 @@ public partial class App : Application
             main.ContentRendered += (_, _) =>
             {
                 main.RecordStartup();   // 다음 시작 화면의 남은 시간 계산용
-                Splash.Close();         // 첫 화면이 그려진 뒤 사라짐
+                // 첫 화면이 그려진 뒤 사라짐. (화면 캡처용: 환경 변수로 잠시 더 보여 둘 수 있음)
+                if (int.TryParse(Environment.GetEnvironmentVariable("AMRMAPEDITOR_SPLASH_HOLD"), out int hold) && hold > 0)
+                {
+                    Splash.BringToFront();
+                    var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(hold) };
+                    t.Tick += (_, _) => { t.Stop(); Splash.Close(); };
+                    t.Start();
+                }
+                else Splash.Close();
             };
             main.Show();
         }

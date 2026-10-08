@@ -116,6 +116,9 @@ public static class Splash
             new DoubleAnimation(target, TimeSpan.FromMilliseconds(150)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
     }
 
+    /// <summary>메인 창 위로 올림 (화면 캡처용)</summary>
+    public static void BringToFront() => _dispatcher?.BeginInvoke(() => { if (_window != null) _window.Topmost = true; });
+
     /// <summary>메인 창이 그려진 뒤 호출. 살짝 사라지며 닫힘</summary>
     public static void Close()
     {

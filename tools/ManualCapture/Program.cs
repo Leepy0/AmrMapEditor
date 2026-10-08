@@ -42,6 +42,7 @@ internal static class Program
     private static int Main(string[] args)
     {
         if (args.Length == 4 && args[0] == "--time") return TimeStartup(args[1], Path.GetFullPath(args[2]), int.Parse(args[3]));
+        if (args.Length == 3 && args[0] == "--splash") return ShotSplash(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
         if (args.Length < 3)
         {
             Console.Error.WriteLine("usage: ManualCapture <AmrMapEditor.exe> <samples dir> <out dir>");
@@ -601,6 +602,63 @@ internal static class Program
         }
         Console.WriteLine($"::notice title=시작 시간 {name} ({size / 1048576.0:0.0} MB)::" +
             string.Join(" · ", rows.ConvertAll(r => { string[] c = r.Split('\t'); return $"{c[2]}회 시작 화면 {c[3]} ms / 메인 창 {c[4]} ms"; })));
+        return 0;
+    }
+
+    /// <summary>
+    /// 시작 화면 캡처: ManualCapture --splash <exe> <out dir>
+    /// 설정 파일로 테마 · 지난 시작 시간을 꾸며 두 가지(라이트 · 남은 시간 있음 / 다크 · 첫 실행)를 찍는다
+    /// </summary>
+    private static int ShotSplash(string exe, string outDir)
+    {
+        Native.SetProcessDpiAwarenessContext(new IntPtr(-4));
+        _work = Path.GetTempPath();
+        Directory.CreateDirectory(Path.Combine(outDir, "shots"));
+        string settings = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AmrMapEditor", "settings.json");
+        string? backup = File.Exists(settings) ? File.ReadAllText(settings) : null;
+        Directory.CreateDirectory(Path.GetDirectoryName(settings)!);
+        Environment.SetEnvironmentVariable("AMRMAPEDITOR_SPLASH_HOLD", "6000");
+        try
+        {
+            foreach ((string name, string json, int waitMs) in new[]
+            {
+                ("splash-light", "{\"Values\":{\"Theme\":\"Light\",\"StartupMs\":\"7000\"}}", 2500),
+                ("splash-dark-first", "{\"Values\":{\"Theme\":\"Dark\"}}", 1500),
+            })
+            {
+                File.WriteAllText(settings, json);
+                _hwnd = IntPtr.Zero;
+                _app = Process.Start(new ProcessStartInfo(exe) { WorkingDirectory = _work, UseShellExecute = false })!;
+                var mine = new PropertyCondition(AutomationElement.ProcessIdProperty, _app.Id);
+                var openBtn = new PropertyCondition(AutomationElement.AutomationIdProperty, "OpenButton");
+                AutomationElement? splash = null;
+                var sw = Stopwatch.StartNew();
+                while (splash == null && sw.ElapsedMilliseconds < 60000)
+                {
+                    foreach (AutomationElement top in AutomationElement.RootElement.FindAll(TreeScope.Children, mine))
+                    {
+                        try
+                        {
+                            if (top.Current.Name == "AMR Map Editor" && top.FindFirst(TreeScope.Descendants, openBtn) == null) { splash = top; break; }
+                        }
+                        catch (ElementNotAvailableException) { }
+                    }
+                    if (splash == null) Thread.Sleep(50);
+                }
+                if (splash == null) throw new Exception("시작 화면이 뜨지 않음");
+                Thread.Sleep(waitMs);
+                WRect r = splash.Current.BoundingRectangle;
+                var area = new Rectangle((int)r.Left - 12, (int)r.Top - 12, (int)r.Width + 24, (int)r.Height + 24);
+                Save(Grab(area), Path.Combine(outDir, "shots", name + ".png"));
+                Say($"shot {name} {area}");
+                try { _app.Kill(); _app.WaitForExit(5000); } catch (Exception) { }
+                Thread.Sleep(500);
+            }
+        }
+        finally
+        {
+            if (backup != null) File.WriteAllText(settings, backup); else File.Delete(settings);
+        }
         return 0;
     }
 
