@@ -853,6 +853,65 @@ public partial class MainWindow
                   BlockedNote(), undo: true);
     }
 
+    /// <summary>
+    /// 맞춘 위치 그대로 맞출 맵을 현재 맵과 같은 크기 · 원점(yaml)의 새 파일로 내보냄. 현재 맵은 바뀌지 않음
+    /// </summary>
+    private void OnSecondExportAligned(object sender, RoutedEventArgs e)
+    {
+        if (_map == null || _second == null || SecondBusyBlocked()) return;
+        CancelPair();
+
+        string baseName = Path.GetFileNameWithoutExtension(_secondPath) ?? "map";
+        var dlg = new SaveFileDialog
+        {
+            Filter = PgmFilter,
+            Title = "현재 맵 크기 · 원점에 맞춰 내보내기",
+            FileName = baseName + "_aligned.pgm",
+            InitialDirectory = (_secondPath != null ? Path.GetDirectoryName(_secondPath) : null) ?? string.Empty,
+        };
+        if (dlg.ShowDialog(this) != true) return;
+        string path = dlg.FileName;
+        if (_path != null && string.Equals(Path.GetFullPath(_path), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
+        {
+            ShowError("현재 맵 파일에는 내보낼 수 없습니다", "현재 맵을 덮어쓰려면 '현재 맵에 반영'을 쓰세요. 다른 이름을 고르세요.");
+            return;
+        }
+
+        string note;
+        while (true)
+        {
+            try
+            {
+                MapImage img;
+                int written;
+                using (new WaitCursor()) img = MapRegistration.ResampleToBase(_map, _second, _secondPose, out written);
+                if (written == 0)
+                {
+                    SetStatus("맞출 맵이 현재 맵 범위 밖에 있어 내보낼 내용이 없습니다.");
+                    return;
+                }
+                PgmIO.Write(path, img);
+
+                string yamlPath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".", Path.GetFileNameWithoutExtension(path) + ".yaml");
+                string imageName = Path.GetFileName(path);
+                string? source = _meta.SourcePath;
+                string yaml = source != null && File.Exists(source)
+                    ? MapMeta.RewriteYaml(File.ReadAllText(source), imageName, _meta.OriginX, _meta.OriginY, _meta.OriginTheta)
+                    : _meta.ToYaml(imageName);
+                File.WriteAllText(yamlPath, yaml);
+                note = $"{Path.GetFileName(path)} + {Path.GetFileName(yamlPath)} · {img.Width} × {img.Height} px · " +
+                       $"origin ({_meta.OriginX:0.###}, {_meta.OriginY:0.###}) · 새 맵 {written:N0} px";
+                break;
+            }
+            catch (Exception ex)
+            {
+                if (!ShowFailure("내보내지 못했습니다", path, ex, canRetry: true)) return;
+            }
+        }
+        _opLog.Add($"{DateTime.Now:HH:mm:ss} 현재 맵 크기 · 원점에 맞춰 내보내기: {note}");
+        SetStatus("내보내기 완료 · " + note);
+    }
+
     // ───────────── 합치기 ─────────────
 
     /// <summary>합친 크기에 넣을 맞출 맵 범위: 기본은 이미지 전체(Unknown 여백 포함), 옵션이면 알려진 부분만</summary>
