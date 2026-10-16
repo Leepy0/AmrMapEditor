@@ -1202,6 +1202,13 @@
                                                     <TextBlock Text="현재 맵에 반영" />
                                                 </StackPanel>
                                             </Button>
+                                            <Button Margin="0,8,0,0" Click="OnSecondExportAligned"
+                                                    ToolTip="맞춘 위치 그대로 맞출 맵을 현재 맵과 같은 크기 · 같은 원점(yaml)의 새 파일로 저장합니다.&#x0a;현재 맵은 바뀌지 않습니다. 현재 맵 밖으로 나간 부분은 잘리고, 닿지 않는 곳은 Unknown입니다.">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Path Style="{StaticResource SmallIcon}" Data="{StaticResource I.Check}" />
+                                                    <TextBlock Text="현재 맵 크기 · 원점에 맞춰 내보내기" />
+                                                </StackPanel>
+                                            </Button>
                                         </StackPanel>
                                     </StackPanel>
                                 </Border>

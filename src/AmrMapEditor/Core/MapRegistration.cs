@@ -769,6 +769,19 @@ public static class MapRegistration
     }
 
     /// <summary>
+    /// 맞출 맵을 현재 맵과 같은 크기 · 같은 좌표(원점 · 해상도)의 새 이미지로 다시 찍음.
+    /// 맞출 맵이 닿지 않는 곳과 맞출 맵의 Unknown은 Unknown. 현재 맵 밖으로 나간 부분은 잘림. 찍힌 픽셀 수는 written
+    /// </summary>
+    public static MapImage ResampleToBase(MapImage baseMap, MapImage moving, MapPose pose, out int written)
+    {
+        var img = new MapImage(baseMap.Width, baseMap.Height) { MaxVal = baseMap.MaxVal, Format = baseMap.Format };
+        img.Comments.AddRange(baseMap.Comments);
+        Array.Fill(img.Data, MapValues.Unknown);
+        written = Paint(img, 0, 0, moving, pose, (gx, gy, cur, mv) => true, null);
+        return img;
+    }
+
+    /// <summary>
     /// 현재 맵 크기 그대로 맞출 맵 내용을 덮어씀 (새 맵이 알고 있는 곳만, region이 있으면 그 안만).
     /// EditTracker를 거치므로 실행 취소 · 보호 영역이 적용됨. 바뀐 픽셀 수 반환
     /// </summary>
