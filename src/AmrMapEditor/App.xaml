@@ -420,7 +420,7 @@
             </Setter>
         </Style>
 
-        <!-- 크기 변경 기준 위치 (3 × 3 칸, 선택 칸 = 기존 맵 자리) -->
+        <!-- 크기 변경 기준 위치 (3 × 3 칸, 선택 칸 = 기준 맵 자리) -->
         <Style x:Key="AnchorRadio" TargetType="RadioButton">
             <Setter Property="GroupName" Value="ResizeAnchor" />
             <Setter Property="Width" Value="28" />

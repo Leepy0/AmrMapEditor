@@ -52,7 +52,7 @@ public sealed class BlobItem : INotifyPropertyChanged
         new(b, $"{index}", $"{b.Area:N0} px · {b.Area * res * res:0.##} m²" + (large ? " · 큰 구역, 확인 필요" : ""), !large);
 }
 
-/// <summary>기준 맵 대비 변경 영역 목록 항목</summary>
+/// <summary>이전 맵 대비 변경 영역 목록 항목</summary>
 public sealed class RegionItem
 {
     public RegionItem(int index, Blob region)

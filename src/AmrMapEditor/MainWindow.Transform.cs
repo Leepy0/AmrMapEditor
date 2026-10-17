@@ -11,7 +11,7 @@ namespace AmrMapEditor;
 
 /// <summary>
 /// 맵 회전 · 캔버스 크기 · 원점 변경, 그리고 크기 · 좌표가 바뀌는 작업(회전 · 기울기 보정 · 크기 · 합치기 · 원점)의 실행 취소.
-/// 픽셀 단위 실행 취소로는 되돌릴 수 없으므로 작업 전 문서 상태(맵 · 원점 · 보호 영역 · 도면 · 맞출 맵 · 기준 맵 ·
+/// 픽셀 단위 실행 취소로는 되돌릴 수 없으므로 작업 전 문서 상태(맵 · 원점 · 보호 영역 · 도면 · 신규 맵 · 이전 맵 ·
 /// 그 시점까지의 실행 취소 기록)를 통째로 보관했다가 Ctrl+Z로 바꿔 끼움
 /// </summary>
 public partial class MainWindow
@@ -147,14 +147,14 @@ public partial class MainWindow
         _dxfPlacement = _dxf != null ? CloneDxf(s.Dxf) : null;
         if (_dxfPlacement != null) UpdateDxfPlacementUi();
 
-        // 기준 맵 (같은 것이면 그대로 둠)
+        // 이전 맵 (같은 것이면 그대로 둠)
         if (!ReferenceEquals(_reference, s.Reference))
         {
-            if (s.Reference != null) SetReference(s.Reference, s.ReferenceName ?? "기준 맵", "실행 취소로 다시 엶");
+            if (s.Reference != null) SetReference(s.Reference, s.ReferenceName ?? "이전 맵", "실행 취소로 다시 엶");
             else CloseReference();
         }
 
-        // 맞출 맵
+        // 신규 맵
         if (s.Second == null)
         {
             if (_second != null) CloseSecond();
@@ -231,7 +231,7 @@ public partial class MainWindow
 
     /// <summary>
     /// 맵을 화면 기준 반시계로 ccwDeg만큼 회전 (캔버스 확장, 빈 곳은 Unknown, 90° 단위는 손실 없음).
-    /// 월드 원점 (0, 0)이 맵에서 같은 지점에 남도록 origin을 다시 계산하고, 보호 영역 · 도면 · 맞출 맵도 같이 돌림.
+    /// 월드 원점 (0, 0)이 맵에서 같은 지점에 남도록 origin을 다시 계산하고, 보호 영역 · 도면 · 신규 맵도 같이 돌림.
     /// 실행 취소(Ctrl+Z)로 되돌릴 수 있음. 성공하면 true
     /// </summary>
     private bool RotateDocument(double ccwDeg, string name)
@@ -239,8 +239,8 @@ public partial class MainWindow
         if (_map == null) return false;
         if (_reference != null)
         {
-            ShowError("기준 맵을 연 상태에서는 회전할 수 없습니다",
-                "업데이트 보정은 기존 좌표를 유지해야 합니다. 기준 맵을 닫은 뒤 다시 시도하세요.");
+            ShowError("이전 맵을 연 상태에서는 회전할 수 없습니다",
+                "업데이트 보정은 기존 좌표를 유지해야 합니다. 이전 맵을 닫은 뒤 다시 시도하세요.");
             return false;
         }
         if (FrameBusy()) return false;
@@ -293,7 +293,7 @@ public partial class MainWindow
             UpdateDxfPlacementUi();
         }
 
-        // 맞출 맵은 현재 맵과 같이 돈 자세로 (q' = Move(R(θ)p + T) = R(θ - a)p + Move(T))
+        // 신규 맵은 기준 맵과 같이 돈 자세로 (q' = Move(R(θ)p + T) = R(θ - a)p + Move(T))
         if (_second != null)
         {
             PointD t = Move(new PointD(_secondPose.Tx, _secondPose.Ty));
@@ -448,15 +448,15 @@ public partial class MainWindow
 
     /// <summary>
     /// 캔버스 크기 변경 (픽셀 크기는 그대로). 기존 픽셀 (0, 0)을 (offX, offY)에 놓음.
-    /// 내용의 월드 좌표가 그대로 남도록 origin을 맞추고, 보호 영역 · 도면 · 맞출 맵도 같이 옮김. 실행 취소 가능
+    /// 내용의 월드 좌표가 그대로 남도록 origin을 맞추고, 보호 영역 · 도면 · 신규 맵도 같이 옮김. 실행 취소 가능
     /// </summary>
     private bool ResizeCanvas(int newW, int newH, int offX, int offY, string name)
     {
         if (_map == null) return false;
         if (_reference != null)
         {
-            ShowError("기준 맵을 연 상태에서는 크기를 바꿀 수 없습니다",
-                "업데이트 보정은 기존 좌표를 유지해야 합니다. 기준 맵을 닫은 뒤 다시 시도하세요.");
+            ShowError("이전 맵을 연 상태에서는 크기를 바꿀 수 없습니다",
+                "업데이트 보정은 기존 좌표를 유지해야 합니다. 이전 맵을 닫은 뒤 다시 시도하세요.");
             return false;
         }
         if ((long)newW * newH > 400_000_000L)

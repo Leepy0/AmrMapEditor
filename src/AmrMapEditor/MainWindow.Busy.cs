@@ -5,7 +5,7 @@ using AmrMapEditor.Core;
 namespace AmrMapEditor;
 
 /// <summary>
-/// 오래 걸릴 수 있는 계산의 진행 표시 · 취소, 그리고 '현재 맵에 반영' 되돌리기 연동
+/// 오래 걸릴 수 있는 계산의 진행 표시 · 취소, 그리고 '기준 맵에 반영' 되돌리기 연동
 /// </summary>
 public partial class MainWindow
 {
@@ -56,9 +56,9 @@ public partial class MainWindow
         return true;
     }
 
-    // ───────────── '현재 맵에 반영' 되돌리기 ─────────────
+    // ───────────── '기준 맵에 반영' 되돌리기 ─────────────
 
-    /// <summary>반영 작업과 함께 지정한 기준 맵 · 업데이트 영역 (Ctrl+Z 한 번에 같이 되돌림)</summary>
+    /// <summary>반영 작업과 함께 지정한 이전 맵 · 업데이트 영역 (Ctrl+Z 한 번에 같이 되돌림)</summary>
     private sealed record ApplyUndo(ChangeSet Change, MapImage? Reference, string? ReferenceName, PixelRegion Area);
 
     private ApplyUndo? _applyUndo;
@@ -69,25 +69,25 @@ public partial class MainWindow
         ApplyUndo a = _applyUndo!;
         if (a.Reference != null && ReferenceEquals(_reference, a.Reference))
         {
-            CloseReference();   // 반영하며 만든 기준 맵 · 업데이트 영역까지
+            CloseReference();   // 반영하며 만든 이전 맵 · 업데이트 영역까지
         }
         else if (_updateAreas.Remove(a.Area))
         {
-            UpdateAreasChanged();   // 사용자가 연 기준 맵은 그대로 두고 반영 범위만 뺌
+            UpdateAreasChanged();   // 사용자가 연 이전 맵은 그대로 두고 반영 범위만 뺌
         }
         if (_second != null)
         {
             SecondShowOverlay.IsChecked = true;
             SegSecond.IsChecked = true;
         }
-        SetStatus("맞출 맵 반영을 되돌렸습니다 (기준 맵 · 업데이트 영역 포함).");
+        SetStatus("신규 맵 반영을 되돌렸습니다 (이전 맵 · 업데이트 영역 포함).");
     }
 
     private void RedoApplyContext()
     {
         ApplyUndo a = _applyUndo!;
         if (a.Reference != null && _reference == null)
-            SetReference(a.Reference, a.ReferenceName ?? "반영 전", "맞출 맵 반영 전 상태");
+            SetReference(a.Reference, a.ReferenceName ?? "반영 전", "신규 맵 반영 전 상태");
         if (!_updateAreas.Contains(a.Area))
         {
             _updateAreas.Add(a.Area);
@@ -95,6 +95,6 @@ public partial class MainWindow
         }
         if (_second != null) SecondShowHidden.IsChecked = true;
         SegUpdate.IsChecked = true;
-        SetStatus("맞출 맵 반영을 다시 적용했습니다.");
+        SetStatus("신규 맵 반영을 다시 적용했습니다.");
     }
 }

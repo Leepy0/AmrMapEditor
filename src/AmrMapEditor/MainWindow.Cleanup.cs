@@ -600,8 +600,8 @@ public partial class MainWindow
         if (_map == null) return;
         if (_reference != null)
         {
-            ShowError("기준 맵을 연 상태에서는 기울기를 보정할 수 없습니다",
-                "업데이트 보정은 기존 좌표를 유지해야 합니다. 기준 맵을 닫은 뒤 다시 시도하세요.");
+            ShowError("이전 맵을 연 상태에서는 기울기를 보정할 수 없습니다",
+                "업데이트 보정은 기존 좌표를 유지해야 합니다. 이전 맵을 닫은 뒤 다시 시도하세요.");
             return;
         }
         double? axisOpt = GetAxis();

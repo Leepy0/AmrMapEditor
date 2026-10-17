@@ -37,7 +37,7 @@ public sealed class MapMouseEventArgs : EventArgs
     public int X { get; }
     public int Y { get; }
 
-    /// <summary>이미지 연속 좌표 (소수점 포함, 맞출 맵 끌기 · 회전용)</summary>
+    /// <summary>이미지 연속 좌표 (소수점 포함, 신규 맵 끌기 · 회전용)</summary>
     public double ImageX { get; }
     public double ImageY { get; }
     public ModifierKeys Modifiers { get; }
@@ -101,7 +101,7 @@ public sealed class MapView : FrameworkElement
     private Geometry? _dxf;
     private bool _showDxf = true;
 
-    // 맞출 맵 레이어 (자체 크기 비트맵 + 현재 맵 좌표로의 변환)
+    // 신규 맵 레이어 (자체 크기 비트맵 + 기준 맵 좌표로의 변환)
     private BitmapSource? _second;
     private Matrix? _secondPose;
     private IReadOnlyList<PointD>? _secondOutline;
@@ -204,7 +204,7 @@ public sealed class MapView : FrameworkElement
         }
     }
 
-    /// <summary>맞출 맵 레이어 불투명도 (0~1)</summary>
+    /// <summary>신규 맵 레이어 불투명도 (0~1)</summary>
     public double SecondOpacity
     {
         get => _secondOpacity;
@@ -215,14 +215,14 @@ public sealed class MapView : FrameworkElement
         }
     }
 
-    /// <summary>맞출 맵 표시 비트맵 (맞출 맵 픽셀 크기). null이면 외곽선만</summary>
+    /// <summary>신규 맵 표시 비트맵 (신규 맵 픽셀 크기). null이면 외곽선만</summary>
     public void SetSecondLayer(BitmapSource? bitmap)
     {
         _second = bitmap;
         RenderContent();
     }
 
-    /// <summary>맞출 맵 → 현재 맵 좌표 변환과 외곽선(현재 맵 좌표). pose가 null이면 레이어 전체 숨김</summary>
+    /// <summary>신규 맵 → 기준 맵 좌표 변환과 외곽선(기준 맵 좌표). pose가 null이면 레이어 전체 숨김</summary>
     public void SetSecondPose(Matrix? pose, IReadOnlyList<PointD>? outline)
     {
         _secondPose = pose;
@@ -407,14 +407,14 @@ public sealed class MapView : FrameworkElement
         if (_overlay != null) dc.DrawImage(_overlay, imgRect);
         if (_second != null && _secondPose is Matrix pose)
         {
-            // 현재 맵 밖으로 나간 맞출 맵 부분에는 Unknown 색 바탕 → 합쳤을 때 모양이 보이게
+            // 기준 맵 밖으로 나간 신규 맵 부분에는 Unknown 색 바탕 → 합쳤을 때 모양이 보이게
             if (_secondOutline is { Count: > 2 } hull)
             {
                 var outside = new CombinedGeometry(GeometryCombineMode.Exclude, ScreenPolyline(hull, true, true), new RectangleGeometry(imgRect));
                 dc.DrawGeometry(SecondBackdropBrush, null, outside);
             }
 
-            // 맞출 맵 픽셀 좌표 → 현재 맵 좌표 → 화면
+            // 신규 맵 픽셀 좌표 → 기준 맵 좌표 → 화면
             Matrix m = pose;
             m.Append(new Matrix(_zoom, 0, 0, _zoom, _offX, _offY));
             dc.PushTransform(new MatrixTransform(m));

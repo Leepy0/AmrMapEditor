@@ -65,8 +65,8 @@ public partial class MainWindow
         EditTool.Wall => "벽 직선화: 벽(들)을 감싸듯 드래그, 여러 벽도 각각 인식 (정리 탭 › 벽 · 기둥 옵션에서 두께·스냅 설정)",
         EditTool.Pillar => "기둥 정리: 기둥을 클릭하면 사각형으로 정리",
         EditTool.CandidatePick => "후보 선택: 맵에서 후보를 클릭해 체크 / 해제",
-        EditTool.SecondMove => "맞출 맵 이동: 드래그 = 이동, Shift+드래그 = 회전 (Ctrl 함께 = 1° 단위), 방향키 1px (Shift 10px), 쉼표 · 마침표 0.1° (Shift 1°)",
-        _ => "복원 브러시: 칠한 부분을 기준 맵 값으로 되돌림",
+        EditTool.SecondMove => "신규 맵 이동: 드래그 = 이동, Shift+드래그 = 회전 (Ctrl 함께 = 1° 단위), 방향키 1px (Shift 10px), 쉼표 · 마침표 0.1° (Shift 1°)",
+        _ => "복원 브러시: 칠한 부분을 이전 맵 값으로 되돌림",
     };
 
     private static string ToolName(EditTool tool) => tool switch
@@ -74,7 +74,7 @@ public partial class MainWindow
         EditTool.Brush => "브러시",
         EditTool.Eraser => "지우개",
         EditTool.Restore => "복원 브러시",
-        EditTool.SecondMove => "맞출 맵 이동",
+        EditTool.SecondMove => "신규 맵 이동",
         _ => tool.ToString(),
     };
 
@@ -121,7 +121,7 @@ public partial class MainWindow
             case EditTool.Restore:
                 if (_tool == EditTool.Restore && _reference == null)
                 {
-                    SetStatus("복원 브러시는 기준 맵이 필요합니다. 업데이트 탭에서 기준 맵을 먼저 여세요.");
+                    SetStatus("복원 브러시는 이전 맵이 필요합니다. 업데이트 탭에서 이전 맵을 먼저 여세요.");
                     return;
                 }
                 if (_tool == EditTool.Restore) _refEdited = true;

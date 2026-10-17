@@ -183,7 +183,7 @@ public partial class MainWindow : Window
         if (p[4] == "1") WindowState = WindowState.Maximized;
     }
 
-    /// <summary>마지막 탭 · 표시 방식 · 격자 · 맞출 맵 불투명도 복원</summary>
+    /// <summary>마지막 탭 · 표시 방식 · 격자 · 신규 맵 불투명도 복원</summary>
     private void RestoreViewSettings()
     {
         if (_settings.Values.TryGetValue("Pane", out string? pane))
@@ -338,7 +338,7 @@ public partial class MainWindow : Window
         SetStatus($"열기 완료: {Path.GetFileName(path)}{prot}{warn}");
     }
 
-    /// <summary>현재 맵 닫기 (저장 안 된 변경이 있으면 확인). 기준 맵 · 도면 · 후보도 함께 정리</summary>
+    /// <summary>기준 맵 닫기 (저장 안 된 변경이 있으면 확인). 이전 맵 · 도면 · 후보도 함께 정리</summary>
     private void CloseMap()
     {
         if (_map == null || BusyBlocked()) return;
@@ -392,7 +392,7 @@ public partial class MainWindow : Window
     private bool ConfirmDiscard()
     {
         if (!_dirty) return true;
-        string name = _path != null ? Path.GetFileName(_path) : "현재 맵";
+        string name = _path != null ? Path.GetFileName(_path) : "기준 맵";
         int r = MessageDialog.Show(this, DialogKind.Warning, "저장하지 않은 변경이 있습니다", $"{name}의 변경 내용을 저장할까요?", null, null,
             new[] { new DialogButton("저장", Primary: true), new DialogButton("저장 안 함"), new DialogButton("취소", Cancel: true) }, 0);
         return r switch
@@ -563,7 +563,7 @@ public partial class MainWindow : Window
             if (_reference != null)
             {
                 DiffStats st = MapDiff.Count(_map!, _reference, _occThreshold);
-                note.AppendLine($"기준 맵({_referenceName}) 대비: 추가 장애물 {st.Added:N0} / 사라진 장애물 {st.Removed:N0} / 기타 {st.Other:N0} px");
+                note.AppendLine($"이전 맵({_referenceName}) 대비: 추가 장애물 {st.Added:N0} / 사라진 장애물 {st.Removed:N0} / 기타 {st.Other:N0} px");
             }
             if (_opLog.Count > 0)
             {
@@ -617,7 +617,7 @@ public partial class MainWindow : Window
         if (_reference != null)
         {
             DiffStats d = MapDiff.Count(map, _reference, _occThreshold);
-            sb.AppendLine($"기준 맵 대비: 추가 장애물 {d.Added:N0} / 사라진 장애물 {d.Removed:N0} / 기타 {d.Other:N0} px");
+            sb.AppendLine($"이전 맵 대비: 추가 장애물 {d.Added:N0} / 사라진 장애물 {d.Removed:N0} / 기타 {d.Other:N0} px");
             if (_updateMask != null)
             {
                 long outside = UpdateCorrection.CountOutside(map, _reference, _updateMask);
@@ -782,7 +782,7 @@ public partial class MainWindow : Window
             UpdateAxisText();
             RebuildOverlay();
             UpdateDiffStats();
-            RefreshSecondLayer();   // 맞출 맵 장애물 색도 임계값 기준
+            RefreshSecondLayer();   // 신규 맵 장애물 색도 임계값 기준
         }
         else
         {
@@ -855,7 +855,7 @@ public partial class MainWindow : Window
 
         if (inText) return;
 
-        // 맞출 맵 이동 도구: 방향키 이동, 쉼표 · 마침표 회전
+        // 신규 맵 이동 도구: 방향키 이동, 쉼표 · 마침표 회전
         if (_tool == EditTool.SecondMove && HandleSecondKey(e.Key, shift))
         {
             e.Handled = true;
@@ -883,7 +883,7 @@ public partial class MainWindow : Window
             case Key.V: SelectTool(EditTool.CandidatePick); e.Handled = true; break;
             case Key.A:
                 if (_second != null) SelectTool(EditTool.SecondMove);
-                else SetStatus("맞출 맵 이동(A)은 맞추기 탭에서 맞출 맵을 연 뒤 쓸 수 있습니다.");
+                else SetStatus("신규 맵 이동(A)은 맞추기 탭에서 신규 맵을 연 뒤 쓸 수 있습니다.");
                 e.Handled = true;
                 break;
             case Key.F: MapViewer.FitToView(); e.Handled = true; break;
@@ -986,7 +986,7 @@ public partial class MainWindow : Window
         _aboutRefresh?.Invoke();   // 정보 창의 '지금 다시 시작' · '되돌리기' 가능 여부
     }
 
-    /// <summary>상태바 칩: 기준 맵 · 맞출 맵 · 도면 · 보호 영역 · 저장 안 됨</summary>
+    /// <summary>상태바 칩: 이전 맵 · 신규 맵 · 도면 · 보호 영역 · 저장 안 됨</summary>
     private void RefreshStatusChips()
     {
         static void Set(Button chip, TextBlock text, string? value)
@@ -994,8 +994,8 @@ public partial class MainWindow : Window
             chip.Visibility = value != null ? Visibility.Visible : Visibility.Collapsed;
             text.Text = value ?? "";
         }
-        Set(RefChip, RefChipText, _map != null && _reference != null ? $"기준 맵 {_referenceName}" : null);
-        Set(SecondChip, SecondChipText, _map != null && _second != null ? $"맞출 맵 {Path.GetFileName(_secondPath)}" : null);
+        Set(RefChip, RefChipText, _map != null && _reference != null ? $"이전 맵 {_referenceName}" : null);
+        Set(SecondChip, SecondChipText, _map != null && _second != null ? $"신규 맵 {Path.GetFileName(_secondPath)}" : null);
         Set(DxfChip, DxfChipText, _map != null && _dxf != null ? $"도면 {Path.GetFileName(_dxfPath)}" : null);
         Set(ProtectChip, ProtectChipText, _map != null && _protect.Count > 0
             ? $"보호 영역 {_protect.Count} · {(ProtectEnableCheck.IsChecked == true ? "적용" : "해제")}"
