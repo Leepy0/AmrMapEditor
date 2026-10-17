@@ -5,7 +5,7 @@ using System.Threading;
 namespace AmrMapEditor.Core;
 
 /// <summary>
-/// 맞출 맵(두 번째 맵) → 현재 맵 좌표 변환. q = R(θ)·p + T.
+/// 신규 맵(두 번째 맵) → 기준 맵 좌표 변환. q = R(θ)·p + T.
 /// p, q는 픽셀 연속 좌표 (픽셀 (i, j)의 중심 = (i + 0.5, j + 0.5)), 각도는 이미지 좌표(y 아래) 기준
 /// </summary>
 public readonly record struct MapPose(double AngleDeg, double Tx, double Ty)
@@ -26,7 +26,7 @@ public readonly record struct MapPose(double AngleDeg, double Tx, double Ty)
         return new PointD(c * x + s * y, -s * x + c * y);
     }
 
-    /// <summary>현재 맵 좌표의 pivot을 중심으로 delta만큼 회전</summary>
+    /// <summary>기준 맵 좌표의 pivot을 중심으로 delta만큼 회전</summary>
     public MapPose RotateAround(PointD pivot, double deltaDeg)
     {
         double r = deltaDeg * Math.PI / 180, c = Math.Cos(r), s = Math.Sin(r);
@@ -52,13 +52,13 @@ public sealed class AlignResult
     public MapPose Start { get; init; }
     public MapPose Pose { get; init; }
 
-    /// <summary>맞출 맵 장애물 점(표본) 수</summary>
+    /// <summary>신규 맵 장애물 점(표본) 수</summary>
     public int Points { get; init; }
 
-    /// <summary>현재 맵의 알려진 영역(Unknown 아님)에 떨어진 점 수 = 겹치는 부분</summary>
+    /// <summary>기준 맵의 알려진 영역(Unknown 아님)에 떨어진 점 수 = 겹치는 부분</summary>
     public int OverlapPoints { get; init; }
 
-    /// <summary>겹치는 점 중 현재 맵 장애물과 1.5px 이내인 비율 (정렬 전 / 후)</summary>
+    /// <summary>겹치는 점 중 기준 맵 장애물과 1.5px 이내인 비율 (정렬 전 / 후)</summary>
     public double MatchBefore { get; init; }
     public double MatchAfter { get; init; }
 
@@ -71,25 +71,25 @@ public sealed class AlignResult
 /// <summary>자동 정렬 진행 상황 (Stage 1 준비 · 2 거친 탐색 · 3 세밀 탐색, Percent 0~100)</summary>
 public readonly record struct AlignProgress(int Stage, double Percent);
 
-/// <summary>맞출 맵과 현재 맵 비교 결과 (맞출 맵 픽셀 기준)</summary>
+/// <summary>신규 맵과 기준 맵 비교 결과 (신규 맵 픽셀 기준)</summary>
 public sealed class AlignDiff
 {
     public const byte None = 0, Same = 1, Added = 2, Removed = 3, NewArea = 4;
 
     public AlignDiff(byte[] kind) => Kind = kind;
 
-    /// <summary>맞출 맵 픽셀별 분류</summary>
+    /// <summary>신규 맵 픽셀별 분류</summary>
     public byte[] Kind { get; }
 
     public int SameCount { get; set; }
 
-    /// <summary>새 맵에만 있는 장애물 (현재 맵에서는 비어 있음)</summary>
+    /// <summary>신규 맵에만 있는 장애물 (기준 맵에서는 비어 있음)</summary>
     public int AddedCount { get; set; }
 
-    /// <summary>현재 맵에만 있는 장애물 (새 맵에서는 비어 있음)</summary>
+    /// <summary>기준 맵에만 있는 장애물 (신규 맵에서는 비어 있음)</summary>
     public int RemovedCount { get; set; }
 
-    /// <summary>현재 맵이 Unknown이거나 범위 밖인 곳을 새 맵이 채운 픽셀</summary>
+    /// <summary>기준 맵이 Unknown이거나 범위 밖인 곳을 신규 맵이 채운 픽셀</summary>
     public int NewAreaCount { get; set; }
 }
 
@@ -106,26 +106,26 @@ public sealed class MergeResult
 
     public MapImage Image { get; }
 
-    /// <summary>현재 맵 픽셀 (0, 0)이 결과 맵에서 놓이는 위치</summary>
+    /// <summary>기준 맵 픽셀 (0, 0)이 결과 맵에서 놓이는 위치</summary>
     public int OffsetX { get; }
     public int OffsetY { get; }
 
-    /// <summary>맞출 맵에서 가져온 픽셀 수</summary>
+    /// <summary>신규 맵에서 가져온 픽셀 수</summary>
     public int FromMoving { get; }
 }
 
 public enum MergeRule
 {
-    /// <summary>현재 맵 우선: 현재 맵이 Unknown인 곳만 새 맵으로 채움 (이중 벽이 생기지 않음)</summary>
+    /// <summary>기준 맵 우선: 기준 맵이 Unknown인 곳만 신규 맵으로 채움 (이중 벽이 생기지 않음)</summary>
     BaseFirst,
 
-    /// <summary>새 맵 우선: 새 맵이 알고 있는 곳은 새 맵 값</summary>
+    /// <summary>신규 맵 우선: 신규 맵이 알고 있는 곳은 신규 맵 값</summary>
     MovingFirst,
 
-    /// <summary>장애물 합침: 어느 한쪽이라도 장애물이면 장애물, 나머지는 현재 맵 우선</summary>
+    /// <summary>장애물 합침: 어느 한쪽이라도 장애물이면 장애물, 나머지는 기준 맵 우선</summary>
     ObstacleUnion,
 
-    /// <summary>지정 영역(선택 영역) 안은 새 맵 우선, 밖은 현재 맵 우선</summary>
+    /// <summary>지정 영역(선택 영역) 안은 신규 맵 우선, 밖은 기준 맵 우선</summary>
     RegionMovingFirst,
 }
 
@@ -135,20 +135,20 @@ public static class MapRegistration
     private const int MaxPoints = 40000;
     private const double MatchDist = 1.5;
 
-    /// <summary>맞출 맵 네 모서리를 현재 맵 좌표로</summary>
+    /// <summary>신규 맵 네 모서리를 기준 맵 좌표로</summary>
     public static PointD[] Footprint(MapImage moving, MapPose pose) => Footprint(new IntRect(0, 0, moving.Width, moving.Height), pose);
 
-    /// <summary>맞출 맵 픽셀 범위 r의 네 모서리를 현재 맵 좌표로 (화면 외곽선 · 반영 범위)</summary>
+    /// <summary>신규 맵 픽셀 범위 r의 네 모서리를 기준 맵 좌표로 (화면 외곽선 · 반영 범위)</summary>
     public static PointD[] Footprint(IntRect r, MapPose pose) => new[]
     {
         pose.ToBase(new PointD(r.X, r.Y)), pose.ToBase(new PointD(r.Right, r.Y)),
         pose.ToBase(new PointD(r.Right, r.Bottom)), pose.ToBase(new PointD(r.X, r.Bottom)),
     };
 
-    /// <summary>맞출 맵이 차지하는 현재 맵 좌표 정수 범위 (현재 맵 밖으로 나갈 수 있음)</summary>
+    /// <summary>신규 맵이 차지하는 기준 맵 좌표 정수 범위 (기준 맵 밖으로 나갈 수 있음)</summary>
     public static IntRect FootprintBounds(MapImage moving, MapPose pose) => FootprintBounds(new IntRect(0, 0, moving.Width, moving.Height), pose);
 
-    /// <summary>맞출 맵 픽셀 범위 r이 차지하는 현재 맵 좌표 정수 범위</summary>
+    /// <summary>신규 맵 픽셀 범위 r이 차지하는 기준 맵 좌표 정수 범위</summary>
     public static IntRect FootprintBounds(IntRect r, MapPose pose)
     {
         PointD[] c = Footprint(r, pose);
@@ -165,7 +165,7 @@ public static class MapRegistration
     }
 
     /// <summary>
-    /// Unknown이 아닌 픽셀들의 볼록 껍질 (맞출 맵 연속 좌표, 픽셀 모서리 기준).
+    /// Unknown이 아닌 픽셀들의 볼록 껍질 (신규 맵 연속 좌표, 픽셀 모서리 기준).
     /// ROS 맵 둘레의 넓은 Unknown 여백을 빼고 실제 내용만 감쌈. 모두 Unknown이면 이미지 네 모서리
     /// </summary>
     public static PointD[] KnownHull(MapImage m)
@@ -218,7 +218,7 @@ public static class MapRegistration
 
     private static double Cross(PointD o, PointD a, PointD b) => (a.X - o.X) * (b.Y - o.Y) - (a.Y - o.Y) * (b.X - o.X);
 
-    /// <summary>맞출 맵 좌표 점들을 현재 맵 좌표로</summary>
+    /// <summary>신규 맵 좌표 점들을 기준 맵 좌표로</summary>
     public static PointD[] Transform(IReadOnlyList<PointD> pts, MapPose pose)
     {
         var r = new PointD[pts.Count];
@@ -247,7 +247,7 @@ public static class MapRegistration
     public static PointD[] FullRect(MapImage m) =>
         new[] { new PointD(0, 0), new PointD(m.Width, 0), new PointD(m.Width, m.Height), new PointD(0, m.Height) };
 
-    /// <summary>합친 맵 범위 (현재 맵 좌표): 현재 맵 전체 + 맞출 맵 (movingHull = FullRect 전체 · KnownHull 알려진 부분만)</summary>
+    /// <summary>합친 맵 범위 (기준 맵 좌표): 기준 맵 전체 + 신규 맵 (movingHull = FullRect 전체 · KnownHull 알려진 부분만)</summary>
     public static IntRect MergedBounds(MapImage baseMap, IReadOnlyList<PointD> movingHull, MapPose pose)
     {
         IntRect fp = BoundsOf(Transform(movingHull, pose));
@@ -265,15 +265,15 @@ public static class MapRegistration
     {
         double res = baseMeta.Resolution;
         if (res <= 0 || Math.Abs(res - movingMeta.Resolution) > res * 1e-6) return null;
-        // 맞출 맵 연속 좌표 p → 월드 → 현재 맵 연속 좌표 q (y축 반대)
+        // 신규 맵 연속 좌표 p → 월드 → 기준 맵 연속 좌표 q (y축 반대)
         double tx = (movingMeta.OriginX - baseMeta.OriginX) / res;
         double ty = baseHeight - movingHeight + (baseMeta.OriginY - movingMeta.OriginY) / res;
         return new MapPose(0, tx, ty);
     }
 
     /// <summary>
-    /// 같은 지점 두 쌍(맞출 맵 m1, m2 ↔ 현재 맵 b1, b2)으로 회전 + 이동 계산 (축척 없음).
-    /// scaleRatio = 현재 맵 두 점 거리 / 맞출 맵 두 점 거리 (1에서 멀면 잘못 찍은 점)
+    /// 같은 지점 두 쌍(신규 맵 m1, m2 ↔ 기준 맵 b1, b2)으로 회전 + 이동 계산 (축척 없음).
+    /// scaleRatio = 기준 맵 두 점 거리 / 신규 맵 두 점 거리 (1에서 멀면 잘못 찍은 점)
     /// </summary>
     public static MapPose FromTwoPoints(PointD m1, PointD m2, PointD b1, PointD b2, out double scaleRatio)
     {
@@ -302,12 +302,12 @@ public static class MapRegistration
     /// <summary>
     /// 대략 맞춘 자세(start)에서 이동 ±radius px, 회전 ±angleRange° 안을 거친 → 세밀 순으로 탐색해
     /// 두 맵이 가장 잘 맞는 자세를 찾음.
-    /// - 특징점은 장애물 경계 픽셀 (속이 찬 랙 · 기둥도 모서리로 각도를 잡음). 현재 맵이 Unknown인 곳은 평가 제외
+    /// - 특징점은 장애물 경계 픽셀 (속이 찬 랙 · 기둥도 모서리로 각도를 잡음). 기준 맵이 Unknown인 곳은 평가 제외
     /// - 거친 탐색 후보는 두 기준에서 고루 뽑음: 시작 자세에서 겹친 점 고정(대략 맞춘 위치 근처 우선) / 위치마다 겹친 점 합
     /// - 세밀 탐색은 후보 위치에서 겹친 점을 고정해서 (겹침 증감에 휘둘리지 않게) 0.02° · 0.25px까지
-    /// - 최종 비교 = 후보 위치에서 겹친 점당 평균: 새 맵 경계 ↔ 현재 맵 경계 일치(양방향) − 새 맵 Free가 현재 맵 벽 위에 놓인 수
+    /// - 최종 비교 = 후보 위치에서 겹친 점당 평균: 신규 맵 경계 ↔ 기준 맵 경계 일치(양방향) − 신규 맵 Free가 기준 맵 벽 위에 놓인 수
     /// - 반복 구조(랙 열 등)처럼 점수가 거의 같은 후보가 여럿이면 대략 맞춘 위치에 가까운 쪽을 고르고 나머지는 Alternatives로
-    /// 맞출 맵 장애물이 부족하거나 겹치는 범위가 없으면 null
+    /// 신규 맵 장애물이 부족하거나 겹치는 범위가 없으면 null
     /// </summary>
     public static AlignResult? Refine(MapImage baseMap, MapImage moving, byte thr, MapPose start, int radius, double angleRange,
                                       IProgress<AlignProgress>? progress = null, CancellationToken ct = default)
@@ -316,7 +316,7 @@ public static class MapRegistration
         int mw = moving.Width, mh = moving.Height, bw = baseMap.Width, bh = baseMap.Height;
         byte[] md = moving.Data, bd = baseMap.Data;
 
-        // 1) 평가 범위와 현재 맵 경계 거리장 (chamfer, 3 = 1px). -1 = Unknown
+        // 1) 평가 범위와 기준 맵 경계 거리장 (chamfer, 3 = 1px). -1 = Unknown
         IntRect fp = FootprintBounds(moving, start);
         double half = Math.Sqrt((double)mw * mw + (double)mh * mh) / 2;
         int margin = radius + (int)Math.Ceiling(half * Math.Sin(Math.Min(angleRange, 90) * Math.PI / 180)) + 4;
@@ -341,7 +341,7 @@ public static class MapRegistration
         }
         DistanceField mdf = DistanceField.Compute(moving.Bounds, (x, y) => md[y * mw + x] >= thr && IsEdge(md, mw, mh, x, y, thr));
 
-        // 2) 새 맵 점 (시작 자세로 현재 맵 좌표에 놓음): 경계 E, Free F
+        // 2) 신규 맵 점 (시작 자세로 기준 맵 좌표에 놓음): 경계 E, Free F
         var eAll = new List<PointD>();
         var fAll = new List<PointD>();
         for (int y = 0; y < mh; y++)
@@ -550,7 +550,7 @@ public static class MapRegistration
             foreach (PointD p in f)
             {
                 int x = (int)Math.Floor(dc * p.X - ds * p.Y + delta.Tx) - rect.X, y = (int)Math.Floor(ds * p.X + dc * p.Y + delta.Ty) - rect.Y;
-                if ((uint)x < (uint)rw && (uint)y < (uint)rh && bObs[y * rw + x]) sum -= 1;   // 새 맵이 비어 있다고 본 곳에 현재 맵 벽
+                if ((uint)x < (uint)rw && (uint)y < (uint)rh && bObs[y * rw + x]) sum -= 1;   // 신규 맵이 비어 있다고 본 곳에 기준 맵 벽
             }
             foreach (PointD p in bEdge)
             {
@@ -621,7 +621,7 @@ public static class MapRegistration
         x == 0 || y == 0 || x == w - 1 || y == h - 1 ||
         d[y * w + x - 1] < thr || d[y * w + x + 1] < thr || d[(y - 1) * w + x] < thr || d[(y + 1) * w + x] < thr;
 
-    /// <summary>a로 놓인 점을 b로 옮기는 변환 (현재 맵 좌표 → 현재 맵 좌표): b ∘ a⁻¹</summary>
+    /// <summary>a로 놓인 점을 b로 옮기는 변환 (기준 맵 좌표 → 기준 맵 좌표): b ∘ a⁻¹</summary>
     private static MapPose Delta(MapPose a, MapPose b)
     {
         // q_b = R_b·p + T_b, p = R_a⁻¹(q_a − T_a) → q_b = R_(b−a)·q_a + (T_b − R_(b−a)·T_a)
@@ -630,7 +630,7 @@ public static class MapRegistration
         return new MapPose(b.AngleDeg - a.AngleDeg, b.Tx - ta.X, b.Ty - ta.Y);
     }
 
-    /// <summary>두 자세 차이 (px): 맞출 맵 장애물 무게중심(맞출 맵 좌표 center)의 위치 차 + 회전에 따른 반경 maxR 끝 이동</summary>
+    /// <summary>두 자세 차이 (px): 신규 맵 장애물 무게중심(신규 맵 좌표 center)의 위치 차 + 회전에 따른 반경 maxR 끝 이동</summary>
     private static double Distance(MapPose a, MapPose b, PointD center, double maxR)
     {
         PointD p = a.ToBase(center), q = b.ToBase(center);
@@ -639,8 +639,8 @@ public static class MapRegistration
     }
 
     /// <summary>
-    /// 맞출 맵을 현재 맵과 비교 (맞출 맵 픽셀 기준). 1px 어긋남은 같은 벽으로 봄.
-    /// 추가 = 새 맵에만 장애물, 삭제 = 현재 맵에만 장애물, 새 영역 = 현재 맵이 모르는 곳
+    /// 신규 맵을 기준 맵과 비교 (신규 맵 픽셀 기준). 1px 어긋남은 같은 벽으로 봄.
+    /// 추가 = 신규 맵에만 장애물, 삭제 = 기준 맵에만 장애물, 새 영역 = 기준 맵이 모르는 곳
     /// </summary>
     public static AlignDiff Compare(MapImage baseMap, MapImage moving, MapPose pose, byte thr)
     {
@@ -650,7 +650,7 @@ public static class MapRegistration
         var diff = new AlignDiff(kind);
         double r = pose.AngleDeg * Math.PI / 180, c = Math.Cos(r), s = Math.Sin(r);
 
-        // 맞출 맵 픽셀 → 현재 맵 픽셀 위치 (범위 밖 -1)
+        // 신규 맵 픽셀 → 기준 맵 픽셀 위치 (범위 밖 -1)
         var map = new int[md.Length];
         for (int y = 0; y < mh; y++)
         for (int x = 0; x < mw; x++)
@@ -704,7 +704,7 @@ public static class MapRegistration
         return diff;
     }
 
-    /// <summary>비교 결과의 추가 · 삭제 덩어리를 현재 맵 좌표 범위로 (면적 큰 순, minArea 이상)</summary>
+    /// <summary>비교 결과의 추가 · 삭제 덩어리를 기준 맵 좌표 범위로 (면적 큰 순, minArea 이상)</summary>
     public static List<(IntRect Bounds, int Area, bool Added)> DiffRegions(AlignDiff diff, MapImage moving, MapPose pose, int minArea)
     {
         var result = new List<(IntRect, int, bool)>();
@@ -717,7 +717,7 @@ public static class MapRegistration
             foreach (Blob b in BlobDetector.Detect(mask, MapValues.Obstacle, int.MaxValue, int.MaxValue, null, collectPixels: false))
             {
                 if (b.Area < minArea) continue;
-                // 범위 네 모서리를 현재 맵 좌표로
+                // 범위 네 모서리를 기준 맵 좌표로
                 IntRect r = b.Bounds;
                 double x0 = double.MaxValue, y0 = double.MaxValue, x1 = double.MinValue, y1 = double.MinValue;
                 foreach (PointD p in new[] { new PointD(r.X, r.Y), new PointD(r.Right, r.Y), new PointD(r.Right, r.Bottom), new PointD(r.X, r.Bottom) })
@@ -735,13 +735,13 @@ public static class MapRegistration
     }
 
     /// <summary>
-    /// 두 맵을 합친 새 맵. 결과 크기 = 현재 맵 + 맞출 맵의 알려진 부분(볼록 껍질)을 모두 담는 범위 (맞출 맵 둘레 Unknown 여백은 제외),
-    /// 현재 맵 좌표는 (OffsetX, OffsetY)만큼 밀림.
-    /// 맞출 맵은 회전 · 이동 후 Nearest로 다시 찍고, 맞출 맵의 Unknown은 절대 덮어쓰지 않음.
-    /// region은 RegionMovingFirst에서 새 맵이 우선할 범위 (현재 맵 좌표)
+    /// 두 맵을 합친 신규 맵. 결과 크기 = 기준 맵 + 신규 맵의 알려진 부분(볼록 껍질)을 모두 담는 범위 (신규 맵 둘레 Unknown 여백은 제외),
+    /// 기준 맵 좌표는 (OffsetX, OffsetY)만큼 밀림.
+    /// 신규 맵은 회전 · 이동 후 Nearest로 다시 찍고, 신규 맵의 Unknown은 절대 덮어쓰지 않음.
+    /// region은 RegionMovingFirst에서 신규 맵이 우선할 범위 (기준 맵 좌표)
     /// </summary>
     /// <summary>
-    /// 두 맵 합치기. trimUnknown = false면 두 맵 이미지 전체를 담는 크기, true면 맞출 맵은 알려진 부분만 담음
+    /// 두 맵 합치기. trimUnknown = false면 두 맵 이미지 전체를 담는 크기, true면 신규 맵은 알려진 부분만 담음
     /// </summary>
     public static MergeResult Merge(MapImage baseMap, MapImage moving, MapPose pose, MergeRule rule, byte thr, PixelRegion? region,
                                     bool trimUnknown = false)
@@ -769,8 +769,8 @@ public static class MapRegistration
     }
 
     /// <summary>
-    /// 맞출 맵을 현재 맵과 같은 크기 · 같은 좌표(원점 · 해상도)의 새 이미지로 다시 찍음.
-    /// 맞출 맵이 닿지 않는 곳과 맞출 맵의 Unknown은 Unknown. 현재 맵 밖으로 나간 부분은 잘림. 찍힌 픽셀 수는 written
+    /// 신규 맵을 기준 맵과 같은 크기 · 같은 좌표(원점 · 해상도)의 새 이미지로 다시 찍음.
+    /// 신규 맵이 닿지 않는 곳과 신규 맵의 Unknown은 Unknown. 기준 맵 밖으로 나간 부분은 잘림. 찍힌 픽셀 수는 written
     /// </summary>
     public static MapImage ResampleToBase(MapImage baseMap, MapImage moving, MapPose pose, out int written)
     {
@@ -782,7 +782,7 @@ public static class MapRegistration
     }
 
     /// <summary>
-    /// 현재 맵 크기 그대로 맞출 맵 내용을 덮어씀 (새 맵이 알고 있는 곳만, region이 있으면 그 안만).
+    /// 기준 맵 크기 그대로 신규 맵 내용을 덮어씀 (신규 맵이 알고 있는 곳만, region이 있으면 그 안만).
     /// EditTracker를 거치므로 실행 취소 · 보호 영역이 적용됨. 바뀐 픽셀 수 반환
     /// </summary>
     public static int ApplyInto(EditTracker t, MapImage moving, MapPose pose, PixelRegion? region)
@@ -797,7 +797,7 @@ public static class MapRegistration
     }
 
     /// <summary>
-    /// 맞출 맵을 dst(현재 맵 좌표가 (ox, oy)만큼 밀린 캔버스)에 찍음. take(현재 맵 좌표 x, y, 기존 값, 새 값)가 true인 곳만.
+    /// 신규 맵을 dst(기준 맵 좌표가 (ox, oy)만큼 밀린 캔버스)에 찍음. take(기준 맵 좌표 x, y, 기존 값, 새 값)가 true인 곳만.
     /// set이 null이면 dst에 직접 기록. 기록한 픽셀 수 반환
     /// </summary>
     private static int Paint(MapImage dst, int ox, int oy, MapImage moving, MapPose pose,
@@ -832,12 +832,12 @@ public static class MapRegistration
     }
 
     /// <summary>
-    /// 합친 맵의 yaml origin: 현재 맵의 월드 좌표가 그대로 유지되도록 (현재 맵 좌하단이 결과에서 (ox, oy + baseHeight)에 놓임)
+    /// 합친 맵의 yaml origin: 기준 맵의 월드 좌표가 그대로 유지되도록 (기준 맵 좌하단이 결과에서 (ox, oy + baseHeight)에 놓임)
     /// </summary>
     public static (double OriginX, double OriginY) MergedOrigin(MapMeta baseMeta, int baseHeight, MergeResult r)
     {
         double res = baseMeta.Resolution;
-        int bottomGap = r.Image.Height - (r.OffsetY + baseHeight);   // 현재 맵 아래쪽으로 늘어난 줄 수
+        int bottomGap = r.Image.Height - (r.OffsetY + baseHeight);   // 기준 맵 아래쪽으로 늘어난 줄 수
         return (baseMeta.OriginX - r.OffsetX * res, baseMeta.OriginY - bottomGap * res);
     }
 

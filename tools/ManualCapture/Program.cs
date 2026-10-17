@@ -182,7 +182,7 @@ internal static class Program
             Key((byte)'B');
         });
 
-        // ── 새 맵 정리 ──
+        // ── 신규 맵 정리 ──
         Step("정리 탭", () =>
         {
             Key(VK.Control, (byte)'4');
@@ -381,9 +381,9 @@ internal static class Program
             Shot("20-update-empty", "InspectorRoot", "SegUpdate");
         });
 
-        Step("기준 맵 열기", () =>
+        Step("이전 맵 열기", () =>
         {
-            ClickText("기준 맵 열기", 0);
+            ClickText("이전 맵 열기", 0);
             ChooseFile(WaitDialog(), Path.Combine(_work, "sample_before.pgm"));
             WaitIdle(1500);
             Park();

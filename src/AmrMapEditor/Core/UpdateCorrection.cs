@@ -24,7 +24,7 @@ public static class MapAlign
     }
 
     /// <summary>
-    /// 두 yaml origin으로 기준 맵 오프셋 계산 (ROS 규칙, 해상도가 같아야 함).
+    /// 두 yaml origin으로 이전 맵 오프셋 계산 (ROS 규칙, 해상도가 같아야 함).
     /// 결과는 Shift(dx, dy)에 그대로 사용
     /// </summary>
     public static (int Dx, int Dy)? OffsetFromMeta(MapMeta current, int currentHeight, MapMeta reference, int referenceHeight)
@@ -51,7 +51,7 @@ public sealed class OffsetResult
     public double MeanAfter { get; init; }
 }
 
-/// <summary>기존 맵(기준)에 업데이트가 덧그려진 맵 보정</summary>
+/// <summary>기준 맵에 업데이트가 덧그려진 경우의 보정</summary>
 public static class UpdateCorrection
 {
     /// <summary>
@@ -92,7 +92,7 @@ public static class UpdateCorrection
         }
     }
 
-    /// <summary>업데이트 영역 밖에서 기준 맵과 다른 픽셀 수</summary>
+    /// <summary>업데이트 영역 밖에서 이전 맵과 다른 픽셀 수</summary>
     public static long CountOutside(MapImage cur, MapImage reference, bool[] areaMask)
     {
         long n = 0;
@@ -101,7 +101,7 @@ public static class UpdateCorrection
         return n;
     }
 
-    /// <summary>업데이트 영역 밖의 변경을 모두 기준 맵 값으로 되돌림</summary>
+    /// <summary>업데이트 영역 밖의 변경을 모두 이전 맵 값으로 되돌림</summary>
     public static int RevertOutside(MapImage reference, bool[] areaMask, EditTracker t)
     {
         byte[] cur = t.Map.Data, rf = reference.Data;
@@ -112,8 +112,8 @@ public static class UpdateCorrection
     }
 
     /// <summary>
-    /// 추가된 장애물을 기준 맵 장애물에 맞추는 이동량(dx, dy, θ) 추정.
-    /// 결과 이동량을 업데이트 내용에 적용하면 기준 맵과 겹침. 추가 장애물이 20px 미만이면 null
+    /// 추가된 장애물을 이전 맵 장애물에 맞추는 이동량(dx, dy, θ) 추정.
+    /// 결과 이동량을 업데이트 내용에 적용하면 이전 맵과 겹침. 추가 장애물이 20px 미만이면 null
     /// </summary>
     public static OffsetResult? EstimateOffset(MapImage cur, MapImage reference, byte thr, bool[]? areaMask,
                                                int radius, double maxAngleDeg)
@@ -228,8 +228,8 @@ public static class UpdateCorrection
     }
 
     /// <summary>
-    /// 업데이트 내용(기준과 다른 픽셀)을 (dx, dy)만큼 옮겨 기준 맵에 다시 합성.
-    /// keepReferenceObstacles면 옮긴 값이 기준 맵 장애물을 지우지 않음. 이동한 픽셀 수 반환
+    /// 업데이트 내용(기준과 다른 픽셀)을 (dx, dy)만큼 옮겨 이전 맵에 다시 합성.
+    /// keepReferenceObstacles면 옮긴 값이 이전 맵 장애물을 지우지 않음. 이동한 픽셀 수 반환
     /// </summary>
     public static int Realign(MapImage reference, bool[]? areaMask, int dx, int dy, byte thr,
                               bool keepReferenceObstacles, EditTracker t)
@@ -248,7 +248,7 @@ public static class UpdateCorrection
             vals.Add(a[i]);
         }
 
-        // 원위치는 기준 맵 값으로
+        // 원위치는 이전 맵 값으로
         foreach (int i in idx) t.SetIndex(i, b[i]);
 
         // 이동 위치에 업데이트 값 기록
@@ -265,7 +265,7 @@ public static class UpdateCorrection
         return moved;
     }
 
-    /// <summary>추가된 장애물 중 기준 맵 장애물에서 maxDist px 이내인 덩어리 (이중 벽 후보)</summary>
+    /// <summary>추가된 장애물 중 이전 맵 장애물에서 maxDist px 이내인 덩어리 (이중 벽 후보)</summary>
     public static List<Blob> FindDuplicateWalls(MapImage cur, MapImage reference, byte thr, bool[]? areaMask,
                                                 double maxDist, int minArea)
     {
@@ -302,7 +302,7 @@ public static class UpdateCorrection
             .ToList();
     }
 
-    /// <summary>덩어리를 기준 맵 값으로 복원. 주변 expand px의 확률값 변경분도 함께 복원</summary>
+    /// <summary>덩어리를 이전 맵 값으로 복원. 주변 expand px의 확률값 변경분도 함께 복원</summary>
     public static int RestoreFromReference(Blob blob, MapImage reference, EditTracker t, byte thr, int expand)
     {
         if (blob.Pixels == null) return 0;

@@ -85,14 +85,14 @@ public sealed class DiffStats
     public long Total => Added + Removed + Other;
 }
 
-/// <summary>기준 맵(업데이트 전)과 현재 맵 비교</summary>
+/// <summary>이전 맵(업데이트 전)과 기준 맵 비교</summary>
 public static class MapDiff
 {
     // Pbgra32 프리멀티플라이드 색상
     public static readonly uint AddedColor = Premul(200, 255, 30, 30);      // 빨강: 새로 생긴 장애물
     public static readonly uint RemovedColor = Premul(200, 20, 110, 255);   // 파랑: 사라진 장애물
     public static readonly uint OtherColor = Premul(110, 255, 210, 0);      // 노랑: 기타 값 변화
-    public static readonly uint ReferenceColor = Premul(150, 0, 200, 220);  // 청록: 기준 맵 장애물
+    public static readonly uint ReferenceColor = Premul(150, 0, 200, 220);  // 청록: 이전 맵 장애물
 
     public static void Fill(MapImage cur, MapImage reference, byte threshold, MapOverlayMode mode, IntRect chunk, uint[] dest)
     {

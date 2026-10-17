@@ -13,7 +13,7 @@ using Microsoft.Win32;
 
 namespace AmrMapEditor;
 
-/// <summary>업데이트 보정: 기준 맵 비교, 업데이트 영역, 영역 밖 복원, 어긋남, 이중 벽</summary>
+/// <summary>업데이트 보정: 이전 맵 비교, 업데이트 영역, 영역 밖 복원, 어긋남, 이중 벽</summary>
 public partial class MainWindow
 {
     private const int MaxDiffRegions = 1000;
@@ -21,16 +21,16 @@ public partial class MainWindow
     // 벽 불일치가 이보다 크면 같은 좌표계에서 업데이트한 맵이 아닌 것으로 봄 (같은 좌표계 업데이트는 보통 5~20%)
     private const double MismatchLimit = 0.35;
 
-    private MapImage? _reference;           // 현재 맵 좌표로 정렬된 기준 맵
+    private MapImage? _reference;           // 기준 맵 좌표로 정렬된 이전 맵
     private string? _referenceName;
     private MapOverlayMode _overlayMode = MapOverlayMode.Diff;
     private readonly List<PixelRegion> _updateAreas = new();
     private bool[]? _updateMask;
     private OffsetResult? _lastOffset;
     private bool _dupDetected;
-    private bool _refEdited;   // 기준 맵 값으로 되돌린 편집이 있음 (닫을 때 안내)
+    private bool _refEdited;   // 이전 맵 값으로 되돌린 편집이 있음 (닫을 때 안내)
 
-    // ───────────── 1. 기준 맵 ─────────────
+    // ───────────── 1. 이전 맵 ─────────────
 
     private void OnOpenReference(object sender, RoutedEventArgs e)
     {
@@ -40,7 +40,7 @@ public partial class MainWindow
             return;
         }
 
-        var dlg = new OpenFileDialog { Filter = PgmFilter, Title = "기준 맵 열기 (업데이트 전 맵)" };
+        var dlg = new OpenFileDialog { Filter = PgmFilter, Title = "이전 맵 열기 (업데이트 전 맵)" };
         if (dlg.ShowDialog(this) != true) return;
 
         MapImage r;
@@ -53,7 +53,7 @@ public partial class MainWindow
             }
             catch (Exception ex)
             {
-                if (!ShowFailure("기준 맵을 열 수 없습니다", dlg.FileName, ex, canRetry: true)) return;
+                if (!ShowFailure("이전 맵을 열 수 없습니다", dlg.FileName, ex, canRetry: true)) return;
             }
         }
 
@@ -68,7 +68,7 @@ public partial class MainWindow
             if (off == null)
             {
                 ShowError("해상도가 달라 비교할 수 없습니다",
-                    $"현재 맵 {_meta.Resolution} m/px, 기준 맵 {refMeta.Resolution} m/px입니다. 같은 해상도로 저장한 맵만 비교할 수 있습니다.");
+                    $"기준 맵 {_meta.Resolution} m/px, 이전 맵 {refMeta.Resolution} m/px입니다. 같은 해상도로 저장한 맵만 비교할 수 있습니다.");
                 return;
             }
             (dx, dy) = off.Value;
@@ -83,16 +83,16 @@ public partial class MainWindow
 
         MapImage aligned = dx == 0 && dy == 0 && sameSize ? r : MapAlign.Shift(r, _map.Width, _map.Height, dx, dy);
 
-        // 따로 그린 맵(다른 좌표계)이면 업데이트 보정이 기준 맵 내용을 현재 맵에 덮어씀 → 맞추기 탭 권장
+        // 따로 그린 맵(다른 좌표계)이면 업데이트 보정이 이전 맵 내용을 기준 맵에 덮어씀 → 맞추기 탭 권장
         double mismatch;
         using (new WaitCursor()) mismatch = UpdateCorrection.ObstacleMismatch(_map, aligned, _occThreshold);
         if (mismatch > MismatchLimit)
         {
             int choice = MessageDialog.Show(this, DialogKind.Warning, "따로 그린 맵 같습니다",
                 $"두 맵의 벽이 {mismatch:P0} 어긋납니다. 같은 좌표계에서 업데이트한 맵이 아닐 수 있습니다. " +
-                "이대로 기준 맵으로 쓰면 영역 밖 되돌리기 · 옮겨서 합치기가 기준 맵 내용을 현재 맵에 덮어씁니다.",
+                "이대로 이전 맵으로 쓰면 영역 밖 되돌리기 · 옮겨서 합치기가 이전 맵 내용을 기준 맵에 덮어씁니다.",
                 new[] { ("권장", "맞추기 탭에서 위치를 맞춘 뒤 비교 · 반영") }, null,
-                new[] { new DialogButton("맞추기 탭에서 열기", Primary: true), new DialogButton("기준 맵으로 열기"), new DialogButton("취소", Cancel: true) }, 0);
+                new[] { new DialogButton("맞추기 탭에서 열기", Primary: true), new DialogButton("이전 맵으로 열기"), new DialogButton("취소", Cancel: true) }, 0);
             if (choice is 2 or < 0) return;
             if (choice == 0)
             {
@@ -105,7 +105,7 @@ public partial class MainWindow
         SetReference(aligned, Path.GetFileName(dlg.FileName), note, dlg.FileName);
     }
 
-    /// <summary>기준 맵 지정 (현재 맵 좌표로 정렬된 상태)</summary>
+    /// <summary>이전 맵 지정 (기준 맵 좌표로 정렬된 상태)</summary>
     private void SetReference(MapImage aligned, string name, string note, string? path = null)
     {
         _reference = aligned;
@@ -136,11 +136,11 @@ public partial class MainWindow
         bool edited = _refEdited;
         CloseReference();
         SetStatus(edited
-            ? "기준 맵을 닫았습니다. 기준 맵 값으로 되돌린 편집은 현재 맵에 남아 있으며 실행 취소(Ctrl+Z)로 되돌릴 수 있습니다."
-            : "기준 맵을 닫았습니다.");
+            ? "이전 맵을 닫았습니다. 이전 맵 값으로 되돌린 편집은 기준 맵에 남아 있으며 실행 취소(Ctrl+Z)로 되돌릴 수 있습니다."
+            : "이전 맵을 닫았습니다.");
     }
 
-    /// <summary>기준 맵과 그에 딸린 표시 · 상태(변경점 오버레이, 업데이트 영역, 후보, 어긋남 값)를 모두 정리</summary>
+    /// <summary>이전 맵과 그에 딸린 표시 · 상태(변경점 오버레이, 업데이트 영역, 후보, 어긋남 값)를 모두 정리</summary>
     private void CloseReference()
     {
         _reference = null;
@@ -196,7 +196,7 @@ public partial class MainWindow
 
     private void UpdateDiffStats()
     {
-        InvalidateSecondDiff(false);   // 맞추기 탭 비교도 현재 맵 기준이라 다시 계산
+        InvalidateSecondDiff(false);   // 맞추기 탭 비교도 기준 맵 기준이라 다시 계산
         if (_map == null || _reference == null)
         {
             RefreshUpdateGuide();
@@ -258,7 +258,7 @@ public partial class MainWindow
         if (_map == null || _tracker == null) return;
         if (_reference == null)
         {
-            SetStatus("기준 맵을 먼저 여세요.");
+            SetStatus("이전 맵을 먼저 여세요.");
             return;
         }
         if (_updateMask == null)
@@ -267,7 +267,7 @@ public partial class MainWindow
             return;
         }
 
-        if (!ConfirmReferenceWrite("영역 밖 되돌리기", "영역 밖 변경을 모두 기준 맵 값으로 바꾸므로")) return;
+        if (!ConfirmReferenceWrite("영역 밖 되돌리기", "영역 밖 변경을 모두 이전 맵 값으로 바꾸므로")) return;
 
         int n;
         _refEdited = true;
@@ -277,21 +277,21 @@ public partial class MainWindow
             n = UpdateCorrection.RevertOutside(_reference, _updateMask, _tracker);
             CommitEdit();
         }
-        SetStatus((n == 0 ? "영역 밖 변경 없음" : $"영역 밖 변경 {n:N0} px를 기준 맵 값으로 되돌림") + BlockedNote(), undo: n > 0);
+        SetStatus((n == 0 ? "영역 밖 변경 없음" : $"영역 밖 변경 {n:N0} px를 이전 맵 값으로 되돌림") + BlockedNote(), undo: n > 0);
     }
 
     // ───────────── 4. 어긋남 / 재정렬 ─────────────
 
     /// <summary>
-    /// 기준 맵 값을 넓게 덮어쓰는 작업 전 확인. 두 맵 벽이 많이 어긋나면(따로 그린 맵) 경고하고 맞추기 탭을 안내
+    /// 이전 맵 값을 넓게 덮어쓰는 작업 전 확인. 두 맵 벽이 많이 어긋나면(따로 그린 맵) 경고하고 맞추기 탭을 안내
     /// </summary>
     private bool ConfirmReferenceWrite(string title, string what)
     {
         double mm;
         using (new WaitCursor()) mm = UpdateCorrection.ObstacleMismatch(_map!, _reference!, _occThreshold);
         if (mm <= MismatchLimit) return true;
-        return Confirm("기준 맵과 벽이 많이 어긋납니다",
-                       $"{what} 기준 맵 내용이 현재 맵에 덮어써질 수 있습니다. 따로 그린 맵이면 취소하고 '맞추기' 탭에서 위치를 맞춰 비교 · 반영하세요.",
+        return Confirm("이전 맵과 벽이 많이 어긋납니다",
+                       $"{what} 이전 맵 내용이 기준 맵에 덮어써질 수 있습니다. 따로 그린 맵이면 취소하고 '맞추기' 탭에서 위치를 맞춰 비교 · 반영하세요.",
                        title,
                        new[] { ("벽 불일치", $"{mm:P0} (같은 좌표계 업데이트는 보통 {MismatchLimit:P0} 미만)") });
     }
@@ -301,7 +301,7 @@ public partial class MainWindow
         if (_map == null) return;
         if (_reference == null)
         {
-            SetStatus("기준 맵을 먼저 여세요.");
+            SetStatus("이전 맵을 먼저 여세요.");
             return;
         }
         if (!ReadInt(OffsetRadiusBox, 1, 100, "탐색 범위", out int radius)) return;
@@ -350,7 +350,7 @@ public partial class MainWindow
         if (_map == null || _tracker == null) return;
         if (_reference == null)
         {
-            SetStatus("기준 맵을 먼저 여세요.");
+            SetStatus("이전 맵을 먼저 여세요.");
             return;
         }
         if (!ReadInt(RealignDxBox, -200, 200, "이동 dx", out int dx)) return;
@@ -362,8 +362,8 @@ public partial class MainWindow
         }
 
         if (!ConfirmReferenceWrite("옮겨서 합치기", _updateMask == null
-                ? "업데이트 영역이 없어 맵 전체에서 기준 맵과 다른 픽셀을 옮기고 빈 자리를 기준 맵 값으로 채우므로"
-                : "옮기기 전 자리를 기준 맵 값으로 채우므로"))
+                ? "업데이트 영역이 없어 맵 전체에서 이전 맵과 다른 픽셀을 옮기고 빈 자리를 이전 맵 값으로 채우므로"
+                : "옮기기 전 자리를 이전 맵 값으로 채우므로"))
             return;
 
         int moved;
@@ -387,7 +387,7 @@ public partial class MainWindow
         if (_map == null) return;
         if (_reference == null)
         {
-            SetStatus("기준 맵을 먼저 여세요.");
+            SetStatus("이전 맵을 먼저 여세요.");
             return;
         }
         if (!ReadDouble(DupDistBox, 1, 100, "기존 벽과 거리", out double dist)) return;
@@ -446,7 +446,7 @@ public partial class MainWindow
         }
 
         RemoveItems(_dupCandidates, targets);
-        SetStatus($"이중 벽 {targets.Count:N0}개를 기준 맵 값으로 복원 ({n:N0} px)" + BlockedNote(), undo: n > 0);
+        SetStatus($"이중 벽 {targets.Count:N0}개를 이전 맵 값으로 복원 ({n:N0} px)" + BlockedNote(), undo: n > 0);
     }
 
     // ───────────── 6. 변경 영역 ─────────────
@@ -457,7 +457,7 @@ public partial class MainWindow
         MapImage? reference = _reference;
         if (reference == null)
         {
-            SetStatus("기준 맵이 없습니다.");
+            SetStatus("이전 맵이 없습니다.");
             return;
         }
         if (_selection is not PixelRegion s)
@@ -471,14 +471,14 @@ public partial class MainWindow
         BeginEdit("선택 영역 복원");
         s.ForEach((x, y) => tracker.Set(x, y, reference.Get(x, y)));
         int n = CommitEdit();
-        SetStatus($"선택 영역을 기준 맵 값으로 복원 ({n:N0} px)" + BlockedNote(), undo: n > 0);
+        SetStatus($"선택 영역을 이전 맵 값으로 복원 ({n:N0} px)" + BlockedNote(), undo: n > 0);
     }
 
     private void OnFindDiffRegions(object sender, RoutedEventArgs e)
     {
         if (_map == null || _reference == null)
         {
-            SetStatus("기준 맵을 먼저 여세요.");
+            SetStatus("이전 맵을 먼저 여세요.");
             return;
         }
 
@@ -495,7 +495,7 @@ public partial class MainWindow
             _diffRegions.Add(new RegionItem(index++, b));
         DiffRegionList.Visibility = _diffRegions.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         if (regions.Count == 0)
-            ShowEmpty(DiffEmpty, DiffEmptyText, "현재 맵과 기준 맵의 모든 픽셀 값이 같습니다. 업데이트한 내용이 저장됐는지 확인하세요.");
+            ShowEmpty(DiffEmpty, DiffEmptyText, "기준 맵과 이전 맵의 모든 픽셀 값이 같습니다. 업데이트한 내용이 저장됐는지 확인하세요.");
         else
             DiffEmpty.Visibility = Visibility.Collapsed;
 
@@ -520,7 +520,7 @@ public partial class MainWindow
         RefStepsPanel.Visibility = hasRef ? Visibility.Visible : Visibility.Collapsed;
         DiffRegionList.Visibility = _diffRegions.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         if (!hasRef) DiffEmpty.Visibility = Visibility.Collapsed;
-        // 기울기 보정은 좌표계를 바꾸므로 기준 맵 비교 중에는 막음
+        // 기울기 보정은 좌표계를 바꾸므로 이전 맵 비교 중에는 막음
         DeskewButton.IsEnabled = _reference == null;
         if (!hasRef)
         {
